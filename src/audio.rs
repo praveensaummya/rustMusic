@@ -31,6 +31,7 @@ pub struct AudioEngine {
     current_position: Arc<Mutex<f64>>,
     total_duration: Arc<Mutex<f64>>,
     current_song: Arc<Mutex<Option<String>>>,
+    current_path: Arc<Mutex<Option<PathBuf>>>,
 }
 
 impl AudioEngine {
@@ -40,10 +41,12 @@ impl AudioEngine {
         let current_position = Arc::new(Mutex::new(0.0));
         let total_duration = Arc::new(Mutex::new(0.0));
         let current_song = Arc::new(Mutex::new(None));
+        let current_path = Arc::new(Mutex::new(None));
 
         let pos = current_position.clone();
         let dur = total_duration.clone();
         let song = current_song.clone();
+        let path = current_path.clone();
 
         thread::spawn(move || {
             let (_stream, stream_handle) = match OutputStream::try_default() {
@@ -60,6 +63,7 @@ impl AudioEngine {
             let mut sink: Option<Sink> = None;
             let mut is_paused = false;
             let mut volume = 1.0;
+            let mut current_file: Option<PathBuf> = None;
 
             loop {
                 // Update position if playing
@@ -75,23 +79,28 @@ impl AudioEngine {
                             *p = 0.0;
                         }
                         sink = None;
+                        current_file = None;
                         if let Ok(mut s) = song.lock() {
                             *s = None;
+                        }
+                        if let Ok(mut p) = path.lock() {
+                            *p = None;
                         }
                     }
                 }
 
                 // Check for commands
                 match cmd_rx.try_recv() {
-                    Ok(AudioCommand::Play(path)) => {
+                    Ok(AudioCommand::Play(p)) => {
                         // Stop current playback
                         if let Some(s) = sink.take() {
                             s.stop();
                         }
                         is_paused = false;
+                        current_file = Some(p.clone());
 
                         // Try to play the new file
-                        match File::open(&path) {
+                        match File::open(&p) {
                             Ok(file) => {
                                 let reader = BufReader::new(file);
                                 match Decoder::new(reader) {
@@ -104,9 +113,12 @@ impl AudioEngine {
                                             *p = 0.0;
                                         }
                                         if let Ok(mut s) = song.lock() {
-                                            *s = path
+                                            *s = p
                                                 .file_name()
                                                 .map(|n| n.to_string_lossy().to_string());
+                                        }
+                                        if let Ok(mut cp) = path.lock() {
+                                            *cp = Some(p);
                                         }
 
                                         let new_sink = Sink::try_new(&stream_handle).unwrap();
@@ -150,17 +162,72 @@ impl AudioEngine {
                             s.stop();
                         }
                         is_paused = false;
+                        current_file = None;
                         if let Ok(mut p) = pos.lock() {
                             *p = 0.0;
                         }
                         if let Ok(mut s) = song.lock() {
                             *s = None;
                         }
+                        if let Ok(mut p) = path.lock() {
+                            *p = None;
+                        }
                         let _ = status_tx.send(AudioStatus::Stopped);
                     }
-                    Ok(AudioCommand::Seek(_pos)) => {
-                        // rodio doesn't support seeking natively
-                        // This is a limitation we'll work around
+                    Ok(AudioCommand::Seek(target_pos)) => {
+                        // Implement seeking by restarting playback at the target position
+                        if let Some(ref file_path) = current_file {
+                            if let Some(ref s) = sink {
+                                s.stop();
+                            }
+                            sink = None;
+                            is_paused = false;
+
+                            match File::open(file_path) {
+                                Ok(file) => {
+                                    let reader = BufReader::new(file);
+                                    match Decoder::new(reader) {
+                                        Ok(source) => {
+                                            let total = source.total_duration();
+                                            let total_secs =
+                                                total.map(|t| t.as_secs_f64()).unwrap_or(0.0);
+                                            if let Ok(mut d) = dur.lock() {
+                                                *d = total_secs;
+                                            }
+
+                                            // Skip to the target position
+                                            let seek_pos = target_pos.min(total_secs).max(0.0);
+                                            let skipped = source.skip_duration(Duration::from_secs_f64(seek_pos));
+
+                                            if let Ok(mut p) = pos.lock() {
+                                                *p = seek_pos;
+                                            }
+
+                                            let new_sink =
+                                                Sink::try_new(&stream_handle).unwrap();
+                                            new_sink.set_volume(volume);
+                                            new_sink.append(skipped);
+                                            sink = Some(new_sink);
+
+                                            if !is_paused {
+                                                let _ = status_tx.send(AudioStatus::Playing);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let _ = status_tx.send(AudioStatus::Error(
+                                                format!("Failed to seek: {}", e),
+                                            ));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = status_tx.send(AudioStatus::Error(format!(
+                                        "Failed to seek: {}",
+                                        e
+                                    )));
+                                }
+                            }
+                        }
                     }
                     Ok(AudioCommand::SetVolume(v)) => {
                         volume = v;
@@ -188,6 +255,7 @@ impl AudioEngine {
             current_position,
             total_duration,
             current_song,
+            current_path,
         }
     }
 
@@ -225,6 +293,10 @@ impl AudioEngine {
 
     pub fn get_current_song(&self) -> Option<String> {
         self.current_song.lock().unwrap().clone()
+    }
+
+    pub fn get_current_path(&self) -> Option<PathBuf> {
+        self.current_path.lock().unwrap().clone()
     }
 
     pub fn check_status(&self) -> Option<AudioStatus> {

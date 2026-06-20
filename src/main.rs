@@ -5,6 +5,7 @@ use audio::{AudioEngine, AudioStatus};
 use eframe::egui;
 use playlist::{Playlist, Song};
 use rfd::FileDialog;
+use std::path::PathBuf;
 
 struct RustMusicApp {
     audio_engine: AudioEngine,
@@ -14,6 +15,7 @@ struct RustMusicApp {
     is_paused: bool,
     search_query: String,
     status_message: String,
+    last_folder: Option<PathBuf>,
 }
 
 impl RustMusicApp {
@@ -26,6 +28,7 @@ impl RustMusicApp {
             is_paused: false,
             search_query: String::new(),
             status_message: "Welcome to RustMusic!".to_string(),
+            last_folder: None,
         }
     }
 
@@ -42,6 +45,15 @@ impl RustMusicApp {
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
         } else {
             format!("{:02}:{:02}", minutes, seconds)
+        }
+    }
+
+    /// Truncate text to max_chars and add "..." if it was truncated
+    fn truncate_text(text: &str, max_chars: usize) -> String {
+        if text.chars().count() > max_chars {
+            format!("{}...", text.chars().take(max_chars).collect::<String>())
+        } else {
+            text.to_string()
         }
     }
 
@@ -70,6 +82,22 @@ impl RustMusicApp {
                             .map_or(false, |a| a.to_lowercase().contains(&query))
                 })
                 .collect()
+        }
+    }
+
+    fn load_folder(&mut self, dir: PathBuf) {
+        let mut new_playlist = Playlist::new("Music Library");
+        new_playlist.add_songs_from_dir(&dir);
+        if !new_playlist.is_empty() {
+            self.playlist = new_playlist;
+            self.last_folder = Some(dir.clone());
+            self.status_message = format!(
+                "Loaded {} songs from {:?}",
+                self.playlist.len(),
+                dir.file_name().unwrap_or_default()
+            );
+        } else {
+            self.status_message = "No music files found in selected folder".to_string();
         }
     }
 
@@ -140,18 +168,13 @@ impl eframe::App for RustMusicApp {
                 AudioStatus::Finished => {
                     self.is_playing = false;
                     self.is_paused = false;
-                    // Auto-play next song if repeat is on
-                    if self.playlist.repeat {
-                        self.play_next();
-                    }
-                    // Check if we should play next
-                    if !self.is_playing && !self.playlist.is_empty() {
-                        // Play next if there are more songs
-                        if self.playlist.current_index.is_some()
+                    // Auto-play next song
+                    if !self.playlist.is_empty() {
+                        if self.playlist.repeat {
+                            self.play_next();
+                        } else if self.playlist.current_index.is_some()
                             && self.playlist.current_index.unwrap() + 1 < self.playlist.len()
                         {
-                            self.play_next();
-                        } else if self.playlist.current_index.is_some() && self.playlist.repeat {
                             self.play_next();
                         }
                     }
@@ -193,18 +216,15 @@ impl eframe::App for RustMusicApp {
                                     .set_title("Select Music Folder")
                                     .pick_folder()
                                 {
-                                    let mut new_playlist = Playlist::new("Music Library");
-                                    new_playlist.add_songs_from_dir(&dir);
-                                    if !new_playlist.is_empty() {
-                                        self.playlist = new_playlist;
-                                        self.status_message = format!(
-                                            "Loaded {} songs from {:?}",
-                                            self.playlist.len(),
-                                            dir.file_name().unwrap_or_default()
-                                        );
-                                    } else {
-                                        self.status_message =
-                                            "No music files found in selected folder".to_string();
+                                    self.load_folder(dir);
+                                }
+                            }
+
+                            // Refresh button - rescans the last opened folder
+                            if self.last_folder.is_some() {
+                                if ui.button("🔄 Refresh").clicked() {
+                                    if let Some(ref dir) = self.last_folder.clone() {
+                                        self.load_folder(dir.clone());
                                     }
                                 }
                             }
@@ -219,10 +239,7 @@ impl eframe::App for RustMusicApp {
                                     for file in files {
                                         self.playlist.add_song(file);
                                     }
-                                    self.status_message = format!(
-                                        "Added {} songs",
-                                        count
-                                    );
+                                    self.status_message = format!("Added {} songs", count);
                                 }
                             }
 
@@ -324,10 +341,11 @@ impl eframe::App for RustMusicApp {
                                             }
                                             ui.add_space(15.0);
 
-                                            // Song title and artist
+                                            // Song title and artist (truncated)
                                             ui.vertical(|ui| {
+                                                let truncated_title = Self::truncate_text(&song.title, 40);
                                                 ui.label(
-                                                    egui::RichText::new(&song.title)
+                                                    egui::RichText::new(truncated_title)
                                                         .size(14.0)
                                                         .color(if is_current {
                                                             egui::Color32::from_rgb(0, 200, 150)
@@ -336,8 +354,9 @@ impl eframe::App for RustMusicApp {
                                                         }),
                                                 );
                                                 if let Some(artist) = &song.artist {
+                                                    let truncated_artist = Self::truncate_text(artist, 40);
                                                     ui.label(
-                                                        egui::RichText::new(artist)
+                                                        egui::RichText::new(truncated_artist)
                                                             .size(11.0)
                                                             .color(egui::Color32::from_rgb(140, 140, 140)),
                                                     );
@@ -391,23 +410,19 @@ impl eframe::App for RustMusicApp {
             })
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    // Song info (left side)
+                    // Song info (left side) - fixed width to prevent layout shift
                     ui.vertical(|ui| {
-                        let current_song = self.audio_engine.get_current_song();
-                        if let Some(title) = current_song {
-                            ui.label(
-                                egui::RichText::new(&title)
-                                    .size(14.0)
-                                    .strong()
-                                    .color(egui::Color32::WHITE),
-                            );
-                        } else {
-                            ui.label(
-                                egui::RichText::new("No track selected")
-                                    .size(14.0)
-                                    .color(egui::Color32::from_rgb(140, 140, 140)),
-                            );
-                        }
+                        ui.add(egui::Label::new(
+                            egui::RichText::new(
+                                self.audio_engine
+                                    .get_current_song()
+                                    .map(|t| Self::truncate_text(&t, 30))
+                                    .unwrap_or_else(|| "No track selected".to_string()),
+                            )
+                            .size(14.0)
+                            .strong()
+                            .color(egui::Color32::WHITE),
+                        ));
                         ui.label(
                             egui::RichText::new(&self.status_message)
                                 .size(11.0)
@@ -499,7 +514,7 @@ impl eframe::App for RustMusicApp {
                                             .color(egui::Color32::from_rgb(180, 180, 180)),
                                     );
 
-                                    // Progress slider
+                                    // Progress slider - now properly seeks
                                     let mut progress = if duration > 0.0 {
                                         (position / duration) as f32
                                     } else {
