@@ -1,3 +1,4 @@
+use rand::Rng;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
@@ -93,7 +94,6 @@ impl Playlist {
         match self.current_index {
             Some(i) => {
                 if self.shuffle {
-                    use rand::Rng;
                     let mut rng = rand::thread_rng();
                     let new_index = rng.gen_range(0..self.songs.len());
                     self.current_index = Some(new_index);
