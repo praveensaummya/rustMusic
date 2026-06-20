@@ -1,0 +1,34 @@
+[package]
+name = "rustmusic"
+version = "0.1.0"
+edition = "2021"
+description = "A cross-platform music player written in Rust"
+
+[dependencies]
+# GUI framework - cross-platform (Linux, macOS, Windows)
+egui = "0.31"
+eframe = { version = "0.31", features = ["default"] }
+
+# Audio playback - cross-platform
+rodio = "0.20"
+
+# File dialogs - native cross-platform dialogs
+rfd = "0.15"
+
+# Directory walking for scanning music files
+walkdir = "2"
+
+# Audio metadata reading (ID3 tags, etc.)
+lofty = "0.22"
+
+# File path handling
+symphonia = { version = "0.5", features = ["all"] }
+
+# Threading
+crossbeam-channel = "0.5"
+
+# Time formatting
+chrono = "0.4"
+
+# Random number generation (for shuffle)
+rand = "0.8"
