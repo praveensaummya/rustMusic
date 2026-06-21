@@ -176,7 +176,25 @@ impl AudioEngine {
                     }
                     Ok(AudioCommand::Seek(target_pos)) => {
                         if let Some(ref file_path) = current_file {
+                            let mut seek_pos = target_pos.max(0.0);
+                            if let Ok(d) = dur.lock() {
+                                seek_pos = seek_pos.min(*d);
+                            }
+
                             if let Some(ref s) = sink {
+                                // Try fast seek first
+                                if s.try_seek(Duration::from_secs_f64(seek_pos)).is_ok() {
+                                    let current_sink_pos = s.get_pos().as_secs_f64();
+                                    if let Ok(mut o) = offset.lock() {
+                                        *o = seek_pos - current_sink_pos;
+                                    }
+                                    if let Ok(mut p) = pos.lock() {
+                                        *p = seek_pos;
+                                    }
+                                    continue;
+                                }
+                                
+                                // Fallback: recreate sink and skip duration (slower)
                                 s.stop();
                             }
                             sink = None;
@@ -186,19 +204,8 @@ impl AudioEngine {
                                     let reader = BufReader::new(file);
                                     match Decoder::new(reader) {
                                         Ok(source) => {
-                                            let total = source.total_duration();
-                                            let total_secs =
-                                                total.map(|t| t.as_secs_f64()).unwrap_or(0.0);
-                                            if let Ok(mut d) = dur.lock() {
-                                                *d = total_secs;
-                                            }
-
-                                            let seek_pos = target_pos.min(total_secs).max(0.0);
                                             let skipped = source.skip_duration(Duration::from_secs_f64(seek_pos));
-
-                                            // Set position offset so get_pos() + offset = seek_pos
-                                            // The new sink's get_pos() starts near 0, so we store
-                                            // the seek position as an offset
+                                            
                                             if let Ok(mut p) = pos.lock() {
                                                 *p = seek_pos;
                                             }
@@ -206,8 +213,7 @@ impl AudioEngine {
                                                 *o = seek_pos;
                                             }
 
-                                            let new_sink =
-                                                Sink::try_new(&stream_handle).unwrap();
+                                            let new_sink = Sink::try_new(&stream_handle).unwrap();
                                             new_sink.set_volume(volume);
                                             new_sink.append(skipped);
                                             sink = Some(new_sink);
@@ -217,17 +223,12 @@ impl AudioEngine {
                                             }
                                         }
                                         Err(e) => {
-                                            let _ = status_tx.send(AudioStatus::Error(
-                                                format!("Failed to seek: {}", e),
-                                            ));
+                                            let _ = status_tx.send(AudioStatus::Error(format!("Failed to seek: {}", e)));
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    let _ = status_tx.send(AudioStatus::Error(format!(
-                                        "Failed to seek: {}",
-                                        e
-                                    )));
+                                    let _ = status_tx.send(AudioStatus::Error(format!("Failed to seek: {}", e)));
                                 }
                             }
                         }

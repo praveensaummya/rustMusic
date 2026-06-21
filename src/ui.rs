@@ -539,178 +539,180 @@ impl RustMusicApp {
     fn render_player_bar(&mut self, ctx: &egui::Context) {
         let t = self.theme;
         egui::TopBottomPanel::bottom("player_bar")
-            .min_height(80.0)
+            .min_height(90.0)
             .frame(egui::Frame {
                 fill: t.bg_player(),
+                inner_margin: egui::Margin::symmetric(24, 20),
                 ..Default::default()
             })
             .show(ctx, |ui| {
+                let available_width = ui.available_width();
+                
                 ui.horizontal(|ui| {
                     // Left: Song info
-                    ui.vertical(|ui| {
-                        ui.add(egui::Label::new(
-                            egui::RichText::new(
-                                self.audio_engine
-                                    .get_current_song()
-                                    .map(|t| Self::truncate_text(&t, 30))
-                                    .unwrap_or_else(|| "No track selected".to_string()),
-                            )
-                            .size(14.0)
-                            .strong()
-                            .color(t.text_primary()),
-                        ));
-                        ui.label(
-                            egui::RichText::new(&self.status_message)
-                                .size(11.0)
-                                .color(t.text_dim()),
-                        );
-                    });
-
-                    // Center: Controls
-                    ui.with_layout(
-                        egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(available_width * 0.25, ui.available_height()),
+                        egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
-                            ui.add_space(50.0);
-                            self.render_controls(ui);
-                            ui.add_space(30.0);
-                            self.render_shuffle_repeat(ui);
-                            ui.add_space(50.0);
-                            self.render_progress(ui);
-                        },
+                            ui.vertical(|ui| {
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(
+                                        self.audio_engine
+                                            .get_current_song()
+                                            .map(|t| Self::truncate_text(&t, 40))
+                                            .unwrap_or_else(|| "No track selected".to_string()),
+                                    )
+                                    .size(15.0)
+                                    .strong()
+                                    .color(t.text_primary()),
+                                ));
+                                ui.add_space(4.0);
+                                ui.label(
+                                    egui::RichText::new(&self.status_message)
+                                        .size(12.0)
+                                        .color(t.text_dim()),
+                                );
+                            });
+                        }
+                    );
+
+                    // Center: Controls & Progress on one line
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(available_width * 0.5, ui.available_height()),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            // Buttons first
+                            self.render_playback_buttons(ui);
+                            
+                            ui.add_space(20.0);
+                            
+                            // Progress bar takes the remaining width in this block
+                            let progress_width = ui.available_width();
+                            self.render_progress(ui, progress_width);
+                        }
                     );
 
                     // Right: Volume
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(10.0);
-                        self.render_volume(ui);
-                    });
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(available_width * 0.25, ui.available_height()),
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            self.render_volume(ui);
+                        }
+                    );
                 });
             });
     }
 
-    fn render_controls(&mut self, ui: &mut egui::Ui) {
+    fn render_playback_buttons(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        ui.horizontal(|ui| {
-            let prev_btn = egui::Button::new(egui::RichText::new("⏮").size(20.0))
-                .fill(t.btn_bg())
-                .min_size(egui::vec2(40.0, 40.0));
-            if ui.add(prev_btn).clicked() {
-                self.play_previous();
-            }
+        
+        // Shuffle
+        let shuffle_color = if self.playlist.shuffle { t.accent() } else { t.text_dim() };
+        let shuffle_btn = egui::Button::new(egui::RichText::new("🔀").size(16.0).color(shuffle_color))
+            .fill(egui::Color32::TRANSPARENT)
+            .min_size(egui::vec2(32.0, 32.0));
+        if ui.add(shuffle_btn).clicked() {
+            self.playlist.shuffle = !self.playlist.shuffle;
+        }
 
-            ui.add_space(10.0);
+        ui.add_space(10.0);
 
-            let play_icon = if self.is_playing && !self.is_paused {
-                "⏸"
-            } else {
-                "▶"
-            };
-            let play_btn = egui::Button::new(egui::RichText::new(play_icon).size(24.0))
-                .fill(t.btn_play())
-                .min_size(egui::vec2(50.0, 40.0));
-            if ui.add(play_btn).clicked() {
-                self.toggle_play_pause();
-            }
+        // Previous
+        let prev_btn = egui::Button::new(egui::RichText::new("⏮").size(20.0).color(t.text_primary()))
+            .fill(egui::Color32::TRANSPARENT)
+            .min_size(egui::vec2(40.0, 40.0));
+        if ui.add(prev_btn).clicked() {
+            self.play_previous();
+        }
 
-            ui.add_space(10.0);
+        ui.add_space(10.0);
 
-            let next_btn = egui::Button::new(egui::RichText::new("⏭").size(20.0))
-                .fill(t.btn_bg())
-                .min_size(egui::vec2(40.0, 40.0));
-            if ui.add(next_btn).clicked() {
-                self.play_next();
-            }
-        });
+        // Play/Pause
+        let play_icon = if self.is_playing && !self.is_paused { "⏸" } else { "▶" };
+        let play_btn = egui::Button::new(egui::RichText::new(play_icon).size(24.0).color(t.bg_main()))
+            .fill(t.accent())
+            .corner_radius(egui::CornerRadius::same(25))
+            .min_size(egui::vec2(45.0, 45.0));
+        if ui.add(play_btn).clicked() {
+            self.toggle_play_pause();
+        }
+
+        ui.add_space(10.0);
+
+        // Next
+        let next_btn = egui::Button::new(egui::RichText::new("⏭").size(20.0).color(t.text_primary()))
+            .fill(egui::Color32::TRANSPARENT)
+            .min_size(egui::vec2(40.0, 40.0));
+        if ui.add(next_btn).clicked() {
+            self.play_next();
+        }
+
+        ui.add_space(10.0);
+
+        // Repeat
+        let repeat_color = if self.playlist.repeat { t.accent() } else { t.text_dim() };
+        let repeat_btn = egui::Button::new(egui::RichText::new("🔁").size(16.0).color(repeat_color))
+            .fill(egui::Color32::TRANSPARENT)
+            .min_size(egui::vec2(32.0, 32.0));
+        if ui.add(repeat_btn).clicked() {
+            self.playlist.repeat = !self.playlist.repeat;
+        }
     }
 
-    fn render_shuffle_repeat(&mut self, ui: &mut egui::Ui) {
-        let t = self.theme;
-        ui.horizontal(|ui| {
-            let shuffle_color = if self.playlist.shuffle {
-                t.accent()
-            } else {
-                t.text_dim()
-            };
-            let shuffle_btn = egui::Button::new(
-                egui::RichText::new("🔀").size(16.0).color(shuffle_color),
-            )
-            .fill(t.btn_bg())
-            .min_size(egui::vec2(32.0, 32.0));
-            if ui.add(shuffle_btn).clicked() {
-                self.playlist.shuffle = !self.playlist.shuffle;
-            }
-
-            let repeat_color = if self.playlist.repeat {
-                t.accent()
-            } else {
-                t.text_dim()
-            };
-            let repeat_btn = egui::Button::new(
-                egui::RichText::new("🔁").size(16.0).color(repeat_color),
-            )
-            .fill(t.btn_bg())
-            .min_size(egui::vec2(32.0, 32.0));
-            if ui.add(repeat_btn).clicked() {
-                self.playlist.repeat = !self.playlist.repeat;
-            }
-        });
-    }
-
-    fn render_progress(&mut self, ui: &mut egui::Ui) {
+    fn render_progress(&mut self, ui: &mut egui::Ui, full_width: f32) {
         let t = self.theme;
         let position = self.audio_engine.get_position();
         let duration = self.audio_engine.get_duration();
 
-        ui.vertical(|ui| {
-            ui.add_space(5.0);
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(Self::format_time(position))
-                        .size(12.0)
-                        .color(t.text_dim()),
-                );
+        ui.label(
+            egui::RichText::new(Self::format_time(position))
+                .size(12.0)
+                .color(t.text_dim()),
+        );
 
-                let mut progress = if duration > 0.0 {
-                    (position / duration) as f32
-                } else {
-                    0.0
-                };
-                let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
-                if ui.add_sized(egui::vec2(200.0, 20.0), slider).drag_stopped() {
-                    let new_pos = progress as f64 * duration;
-                    self.audio_engine.seek(new_pos);
-                }
+        let mut progress = if duration > 0.0 {
+            (position / duration) as f32
+        } else {
+            0.0
+        };
+        
+        let slider_w = (full_width - 90.0).max(100.0);
+        let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
+        if ui.add_sized(egui::vec2(slider_w, 20.0), slider).drag_stopped() {
+            let new_pos = progress as f64 * duration;
+            self.audio_engine.seek(new_pos);
+        }
 
-                ui.label(
-                    egui::RichText::new(Self::format_time(duration))
-                        .size(12.0)
-                        .color(t.text_dim()),
-                );
-            });
-        });
+        ui.label(
+            egui::RichText::new(Self::format_time(duration))
+                .size(12.0)
+                .color(t.text_dim()),
+        );
     }
 
     fn render_volume(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        ui.horizontal(|ui| {
-            let volume_icon = if self.volume == 0.0 {
-                "🔇"
-            } else if self.volume < 0.5 {
-                "🔉"
-            } else {
-                "🔊"
-            };
-            ui.label(egui::RichText::new(volume_icon).size(16.0));
-            let mut vol = self.volume;
-            ui.add_sized(
-                egui::vec2(100.0, 20.0),
-                egui::Slider::new(&mut vol, 0.0..=1.0).show_value(false),
-            );
-            if vol != self.volume {
-                self.volume = vol;
-                self.audio_engine.set_volume(self.volume);
-            }
-        });
+        let volume_icon = if self.volume == 0.0 {
+            "🔇"
+        } else if self.volume < 0.3 {
+            "🔈"
+        } else if self.volume < 0.7 {
+            "🔉"
+        } else {
+            "🔊"
+        };
+        ui.label(egui::RichText::new(volume_icon).size(18.0).color(t.text_primary()));
+        
+        let mut vol = self.volume;
+        ui.add_sized(
+            egui::vec2(100.0, 20.0),
+            egui::Slider::new(&mut vol, 0.0..=1.0).show_value(false),
+        );
+        if vol != self.volume {
+            self.volume = vol;
+            self.audio_engine.set_volume(self.volume);
+        }
     }
 }
 
