@@ -201,6 +201,7 @@ impl RustMusicApp {
             .min_height(40.0)
             .frame(egui::Frame {
                 fill: t.bg_surface(),
+                inner_margin: egui::Margin::symmetric(12, 10),
                 ..Default::default()
             })
             .show_inside(ui, |ui| {
@@ -213,7 +214,15 @@ impl RustMusicApp {
                     );
                     ui.separator();
 
-                    if ui.button("📂 Open Folder").clicked() {
+                    let mut menu_btn = |text: &str| {
+                        egui::Button::new(egui::RichText::new(text).size(13.0).color(t.text_primary()))
+                            .fill(t.btn_bg())
+                            .corner_radius(egui::CornerRadius::same(6))
+                            .min_size(egui::vec2(0.0, 28.0))
+                    };
+
+                    ui.add_space(8.0);
+                    if ui.add(menu_btn("📂 Open Folder")).clicked() {
                         if let Some(dir) = FileDialog::new()
                             .set_title("Select Music Folder")
                             .pick_folder()
@@ -223,14 +232,16 @@ impl RustMusicApp {
                     }
 
                     if self.last_folder.is_some() {
-                        if ui.button("🔄 Refresh").clicked() {
+                        ui.add_space(4.0);
+                        if ui.add(menu_btn("🔄 Refresh")).clicked() {
                             if let Some(ref dir) = self.last_folder.clone() {
                                 self.load_folder(dir.clone());
                             }
                         }
                     }
 
-                    if ui.button("➕ Add Files").clicked() {
+                    ui.add_space(4.0);
+                    if ui.add(menu_btn("➕ Add Files")).clicked() {
                         if let Some(files) = FileDialog::new()
                             .set_title("Select Music Files")
                             .add_filter("Audio Files", &["mp3", "wav", "flac", "ogg", "m4a"])
@@ -247,7 +258,7 @@ impl RustMusicApp {
                     ui.add_space(10.0);
 
                     // Settings button
-                    if ui.button("⚙️Settings").clicked() {
+                    if ui.add(menu_btn("⚙️ Settings")).clicked() {
                         self.show_settings = !self.show_settings;
                     }
 
@@ -417,6 +428,8 @@ impl RustMusicApp {
             .default_size([400.0, 350.0])
             .frame(egui::Frame {
                 fill: theme_current.settings_bg(),
+                corner_radius: egui::CornerRadius::same(12),
+                inner_margin: egui::Margin::same(24),
                 ..Default::default()
             })
             .show(ctx, |ui| {
@@ -546,14 +559,19 @@ impl RustMusicApp {
                 ..Default::default()
             })
             .show(ctx, |ui| {
-                let available_width = ui.available_width();
+                let total_width = ui.available_width();
                 
                 ui.horizontal(|ui| {
+                    let left_w = total_width * 0.25;
+                    let center_w = total_width * 0.5;
+                    let right_w = total_width * 0.25;
+
                     // Left: Song info
                     ui.allocate_ui_with_layout(
-                        egui::vec2(available_width * 0.25, ui.available_height()),
+                        egui::vec2(left_w, ui.available_height()),
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
+                            ui.set_min_width(left_w);
                             ui.vertical(|ui| {
                                 ui.add(egui::Label::new(
                                     egui::RichText::new(
@@ -578,25 +596,33 @@ impl RustMusicApp {
 
                     // Center: Controls & Progress on one line
                     ui.allocate_ui_with_layout(
-                        egui::vec2(available_width * 0.5, ui.available_height()),
+                        egui::vec2(center_w, ui.available_height()),
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
+                            ui.set_min_width(center_w);
+                            let slider_w = (total_width * 0.25).clamp(100.0, 400.0);
+                            let content_w = 230.0 + 8.0 + slider_w + 90.0;
+                            let padding = (center_w - content_w) / 2.0;
+                            
+                            ui.add_space(padding.max(0.0));
+                            
                             // Buttons first
                             self.render_playback_buttons(ui);
                             
-                            ui.add_space(20.0);
+                            ui.add_space(8.0);
                             
-                            // Progress bar takes the remaining width in this block
-                            let progress_width = ui.available_width();
-                            self.render_progress(ui, progress_width);
+                            // Progress bar
+                            self.render_progress(ui, slider_w + 90.0);
                         }
                     );
 
                     // Right: Volume
                     ui.allocate_ui_with_layout(
-                        egui::vec2(available_width * 0.25, ui.available_height()),
+                        egui::vec2(right_w, ui.available_height()),
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui| {
+                            ui.set_min_width(right_w);
+                            ui.add_space(20.0); // Right margin
                             self.render_volume(ui);
                         }
                     );
@@ -678,11 +704,16 @@ impl RustMusicApp {
         };
         
         let slider_w = (full_width - 90.0).max(100.0);
+        let orig_w = ui.spacing().slider_width;
+        ui.spacing_mut().slider_width = slider_w;
+        
         let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
-        if ui.add_sized(egui::vec2(slider_w, 20.0), slider).drag_stopped() {
+        if ui.add(slider).drag_stopped() {
             let new_pos = progress as f64 * duration;
             self.audio_engine.seek(new_pos);
         }
+        
+        ui.spacing_mut().slider_width = orig_w;
 
         ui.label(
             egui::RichText::new(Self::format_time(duration))
