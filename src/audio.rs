@@ -31,6 +31,7 @@ pub struct AudioEngine {
     current_position: Arc<Mutex<f64>>,
     total_duration: Arc<Mutex<f64>>,
     current_song: Arc<Mutex<Option<String>>>,
+    #[allow(dead_code)]
     position_offset: Arc<Mutex<f64>>,
 }
 
@@ -70,7 +71,7 @@ impl AudioEngine {
                 if let Some(ref s) = sink {
                     if !s.empty() && !is_paused {
                         if let Ok(mut p) = pos.lock() {
-                            if let Ok(mut o) = offset.lock() {
+                            if let Ok(o) = offset.lock() {
                                 *p = s.get_pos().as_secs_f64() + *o;
                             }
                         }
@@ -283,6 +284,7 @@ impl AudioEngine {
         let _ = self.command_sender.send(AudioCommand::Resume);
     }
 
+    #[allow(dead_code)]
     pub fn stop(&self) {
         let _ = self.command_sender.send(AudioCommand::Stop);
     }

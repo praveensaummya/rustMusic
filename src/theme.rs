@@ -174,6 +174,7 @@ impl Theme {
         }
     }
 
+    #[allow(dead_code)]
     pub fn btn_play(&self) -> Color32 {
         match self {
             Theme::Dark => Color32::from_rgb(0, 180, 130),

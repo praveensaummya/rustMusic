@@ -13,6 +13,7 @@ pub struct Song {
 
 #[derive(Debug, Clone)]
 pub struct Playlist {
+    #[allow(dead_code)]
     pub name: String,
     pub songs: Vec<Song>,
     pub current_index: Option<usize>,
@@ -63,6 +64,7 @@ impl Playlist {
         }
     }
 
+    #[allow(dead_code)]
     pub fn remove_song(&mut self, index: usize) {
         if index < self.songs.len() {
             self.songs.remove(index);
@@ -149,11 +151,13 @@ impl Playlist {
         }
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.songs.clear();
         self.current_index = None;
     }
 
+    #[allow(dead_code)]
     pub fn total_duration(&self) -> f64 {
         self.songs.iter().map(|s| s.duration_secs).sum()
     }
