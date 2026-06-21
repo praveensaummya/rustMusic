@@ -18,6 +18,8 @@ pub struct RustMusicApp {
     pub theme: Theme,
     pub config: AppConfig,
     pub show_settings: bool,
+    pub mini_mode: bool,
+    pub prev_mini_mode: bool,
 }
 
 impl RustMusicApp {
@@ -30,7 +32,6 @@ impl RustMusicApp {
             .as_ref()
             .map(|s| PathBuf::from(s));
 
-        // Apply egui visual style
         Self::apply_theme(&cc.egui_ctx, theme);
 
         let mut app = RustMusicApp {
@@ -45,9 +46,10 @@ impl RustMusicApp {
             theme,
             config,
             show_settings: false,
+            mini_mode: false,
+            prev_mini_mode: false,
         };
 
-        // Auto-load last folder if set
         if let Some(ref folder) = last_folder {
             app.load_folder(folder.clone());
             app.status_message = format!(
@@ -61,18 +63,13 @@ impl RustMusicApp {
 
     fn apply_theme(ctx: &egui::Context, theme: Theme) {
         let mut style = (*ctx.style()).clone();
-
-        // Override visual colors
         style.visuals.dark_mode = matches!(theme, Theme::Dark | Theme::Midnight | Theme::Ocean | Theme::Forest);
-
         style.visuals.window_fill = theme.settings_bg();
         style.visuals.panel_fill = theme.bg_main();
-
         ctx.set_style(style);
     }
 
     fn save_config(&self) {
-        // Preserve existing config but update fields
         let mut config = self.config.clone();
         config.theme = self.theme.name().to_string();
         config.volume = self.volume;
@@ -91,7 +88,6 @@ impl RustMusicApp {
         let hours = total_secs / 3600;
         let minutes = (total_secs % 3600) / 60;
         let seconds = total_secs % 60;
-
         if hours > 0 {
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
         } else {
@@ -118,14 +114,8 @@ impl RustMusicApp {
                 .enumerate()
                 .filter(|(_, song)| {
                     song.title.to_lowercase().contains(&query)
-                        || song
-                            .artist
-                            .as_ref()
-                            .map_or(false, |a| a.to_lowercase().contains(&query))
-                        || song
-                            .album
-                            .as_ref()
-                            .map_or(false, |a| a.to_lowercase().contains(&query))
+                        || song.artist.as_ref().map_or(false, |a| a.to_lowercase().contains(&query))
+                        || song.album.as_ref().map_or(false, |a| a.to_lowercase().contains(&query))
                 })
                 .collect()
         }
@@ -214,7 +204,7 @@ impl RustMusicApp {
                     );
                     ui.separator();
 
-                    let mut menu_btn = |text: &str| {
+                    let menu_btn = |text: &str| {
                         egui::Button::new(egui::RichText::new(text).size(13.0).color(t.text_primary()))
                             .fill(t.btn_bg())
                             .corner_radius(egui::CornerRadius::same(6))
@@ -257,7 +247,10 @@ impl RustMusicApp {
 
                     ui.add_space(10.0);
 
-                    // Settings button
+                    if ui.add(menu_btn("🪟 Mini Mode")).clicked() {
+                        self.mini_mode = !self.mini_mode;
+                    }
+
                     if ui.add(menu_btn("⚙ Settings")).clicked() {
                         self.show_settings = !self.show_settings;
                     }
@@ -283,59 +276,27 @@ impl RustMusicApp {
         if songs.is_empty() {
             ui.add_space(60.0);
             ui.vertical_centered(|ui| {
-                ui.label(
-                    egui::RichText::new("🎵")
-                        .size(48.0)
-                        .color(t.text_dim()),
-                );
+                ui.label(egui::RichText::new("🎵").size(48.0).color(t.text_dim()));
                 ui.add_space(10.0);
-                ui.label(
-                    egui::RichText::new("No songs in playlist")
-                        .size(16.0)
-                        .color(t.text_secondary()),
-                );
+                ui.label(egui::RichText::new("No songs in playlist").size(16.0).color(t.text_secondary()));
                 ui.add_space(5.0);
-                ui.label(
-                    egui::RichText::new("Click 'Open Folder' or 'Add Files' to get started")
-                        .size(12.0)
-                        .color(t.text_dim()),
-                );
+                ui.label(egui::RichText::new("Click 'Open Folder' or 'Add Files' to get started").size(12.0).color(t.text_dim()));
             });
         } else {
-            // Table header
             egui::Frame::new()
                 .fill(t.bg_header())
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_space(10.0);
-                        ui.label(
-                            egui::RichText::new("#")
-                                .size(12.0)
-                                .color(t.text_dim()),
-                        );
+                        ui.label(egui::RichText::new("#").size(12.0).color(t.text_dim()));
                         ui.add_space(30.0);
-                        ui.label(
-                            egui::RichText::new("TITLE")
-                                .size(12.0)
-                                .strong()
-                                .color(t.text_dim()),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.add_space(10.0);
-                        });
+                        ui.label(egui::RichText::new("TITLE").size(12.0).strong().color(t.text_dim()));
                     });
                 });
 
-            // Song rows
             for (i, (original_index, song)) in songs.iter().enumerate() {
                 let is_current = self.playlist.current_index == Some(*original_index);
-                let bg_color = if is_current {
-                    t.bg_row_current()
-                } else if i % 2 == 0 {
-                    t.bg_row_even()
-                } else {
-                    t.bg_row_odd()
-                };
+                let bg_color = if is_current { t.bg_row_current() } else if i % 2 == 0 { t.bg_row_even() } else { t.bg_row_odd() };
 
                 let response = egui::Frame::new()
                     .fill(bg_color)
@@ -343,61 +304,29 @@ impl RustMusicApp {
                         ui.horizontal(|ui| {
                             ui.add_space(10.0);
                             if is_current {
-                                ui.label(
-                                    egui::RichText::new("▶")
-                                        .size(14.0)
-                                        .color(t.accent()),
-                                );
+                                ui.label(egui::RichText::new("▶").size(14.0).color(t.accent()));
                             } else {
-                                ui.label(
-                                    egui::RichText::new(format!("{}", original_index + 1))
-                                        .size(12.0)
-                                        .color(t.text_dim()),
-                                );
+                                ui.label(egui::RichText::new(format!("{}", original_index + 1)).size(12.0).color(t.text_dim()));
                             }
                             ui.add_space(15.0);
 
                             ui.vertical(|ui| {
-                                ui.label(
-                                    egui::RichText::new(&song.title)
-                                        .size(14.0)
-                                        .color(if is_current {
-                                            t.accent()
-                                        } else {
-                                            t.text_primary()
-                                        }),
-                                );
+                                ui.label(egui::RichText::new(&song.title).size(14.0).color(if is_current { t.accent() } else { t.text_primary() }));
                                 if let Some(artist) = &song.artist {
-                                    ui.label(
-                                        egui::RichText::new(artist)
-                                            .size(11.0)
-                                            .color(t.text_secondary()),
-                                    );
+                                    ui.label(egui::RichText::new(artist).size(11.0).color(t.text_secondary()));
                                 }
                             });
 
                             if song.duration_secs > 0.0 {
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.add_space(10.0);
-                                        ui.label(
-                                            egui::RichText::new(Self::format_time(song.duration_secs))
-                                                .size(12.0)
-                                                .color(t.text_dim()),
-                                        );
-                                    },
-                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.add_space(10.0);
+                                    ui.label(egui::RichText::new(Self::format_time(song.duration_secs)).size(12.0).color(t.text_dim()));
+                                });
                             }
                         });
                     });
 
-                let sense = ui.interact(
-                    response.response.rect,
-                    ui.next_auto_id(),
-                    egui::Sense::click(),
-                );
-                if sense.double_clicked() {
+                if ui.interact(response.response.rect, ui.next_auto_id(), egui::Sense::click()).double_clicked() {
                     clicked_index = Some(*original_index);
                 }
             }
@@ -407,14 +336,12 @@ impl RustMusicApp {
     }
 
     fn render_settings_window(&mut self, ctx: &egui::Context) {
-        // Extract all data before the window to avoid borrow conflicts
         let show = &mut self.show_settings;
         let theme_current = self.theme;
         let volume_current = self.volume;
         let has_folder = self.last_folder.is_some();
         let folder_display = self.last_folder.as_ref().map(|f| format!("{}", f.display()));
 
-        // Local state for the settings window
         let mut selected_theme = theme_current;
         let mut theme_changed = false;
         let mut new_volume = volume_current;
@@ -431,37 +358,13 @@ impl RustMusicApp {
                 ..Default::default()
             })
             .show(ctx, |ui| {
-                // Theme selection
-                ui.label(
-                    egui::RichText::new("🎨 Theme")
-                        .size(16.0)
-                        .strong()
-                        .color(theme_current.text_primary()),
-                );
+                ui.label(egui::RichText::new("🎨 Theme").size(16.0).strong().color(theme_current.text_primary()));
                 ui.add_space(5.0);
 
                 for theme_variant in Theme::all() {
                     let is_selected = selected_theme == *theme_variant;
-                    let label = if is_selected {
-                        format!("● {}", theme_variant.name())
-                    } else {
-                        format!("○ {}", theme_variant.name())
-                    };
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new(&label)
-                                    .color(if is_selected {
-                                        theme_variant.accent()
-                                    } else {
-                                        theme_current.text_secondary()
-                                    }),
-                            )
-                            .fill(theme_current.btn_bg())
-                            .min_size(egui::vec2(180.0, 28.0)),
-                        )
-                        .clicked()
-                    {
+                    let label = if is_selected { format!("● {}", theme_variant.name()) } else { format!("○ {}", theme_variant.name()) };
+                    if ui.add(egui::Button::new(egui::RichText::new(&label).color(if is_selected { theme_variant.accent() } else { theme_current.text_secondary() })).fill(theme_current.btn_bg()).min_size(egui::vec2(180.0, 28.0))).clicked() {
                         selected_theme = *theme_variant;
                         theme_changed = true;
                         Self::apply_theme(ctx, selected_theme);
@@ -472,23 +375,11 @@ impl RustMusicApp {
                 ui.separator();
                 ui.add_space(10.0);
 
-                // Volume
-                ui.label(
-                    egui::RichText::new("🔊 Default Volume")
-                        .size(16.0)
-                        .strong()
-                        .color(theme_current.text_primary()),
-                );
+                ui.label(egui::RichText::new("🔊 Default Volume").size(16.0).strong().color(theme_current.text_primary()));
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(format!("{:.0}%", new_volume * 100.0))
-                            .color(theme_current.text_secondary()),
-                    );
-                    ui.add_sized(
-                        egui::vec2(200.0, 20.0),
-                        egui::Slider::new(&mut new_volume, 0.0..=1.0).show_value(false),
-                    );
+                    ui.label(egui::RichText::new(format!("{:.0}%", new_volume * 100.0)).color(theme_current.text_secondary()));
+                    ui.add_sized(egui::vec2(200.0, 20.0), egui::Slider::new(&mut new_volume, 0.0..=1.0).show_value(false));
                 });
                 if new_volume != volume_current {
                     vol_changed = true;
@@ -498,42 +389,19 @@ impl RustMusicApp {
                 ui.separator();
                 ui.add_space(10.0);
 
-                // Last folder info
                 if has_folder {
                     if let Some(ref display) = folder_display {
-                        ui.label(
-                            egui::RichText::new("📁 Last Session Folder")
-                                .size(16.0)
-                                .strong()
-                                .color(theme_current.text_primary()),
-                        );
+                        ui.label(egui::RichText::new("📁 Last Session Folder").size(16.0).strong().color(theme_current.text_primary()));
                         ui.add_space(5.0);
-                        ui.label(
-                            egui::RichText::new(display)
-                                .size(12.0)
-                                .color(theme_current.text_secondary()),
-                        );
+                        ui.label(egui::RichText::new(display).size(12.0).color(theme_current.text_secondary()));
                     }
                 }
 
                 ui.add_space(20.0);
 
-                // Save button
-                if ui
-                    .add(
-                        egui::Button::new(
-                            egui::RichText::new("💾 Save Preferences").size(14.0),
-                        )
-                        .fill(theme_current.accent_dim())
-                        .min_size(egui::vec2(180.0, 32.0)),
-                    )
-                    .clicked()
-                {
-                    // Signal save - will be handled after window closes
-                }
+                if ui.add(egui::Button::new(egui::RichText::new("💾 Save Preferences").size(14.0)).fill(theme_current.accent_dim()).min_size(egui::vec2(180.0, 32.0))).clicked() {}
             });
 
-        // Apply changes after window closes (no borrow conflict)
         if theme_changed {
             self.theme = selected_theme;
         }
@@ -558,129 +426,71 @@ impl RustMusicApp {
             })
             .show(ctx, |ui| {
                 let total_width = ui.available_width();
-                
                 ui.horizontal(|ui| {
                     let left_w = total_width * 0.25;
                     let center_w = total_width * 0.5;
                     let right_w = total_width * 0.25;
 
-                    // Left: Song info
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(left_w, ui.available_height()),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.set_min_width(left_w);
-                            ui.vertical(|ui| {
-                                ui.add(egui::Label::new(
-                                    egui::RichText::new(
-                                        self.audio_engine
-                                            .get_current_song()
-                                            .map(|t| Self::truncate_text(&t, 40))
-                                            .unwrap_or_else(|| "No track selected".to_string()),
-                                    )
-                                    .size(15.0)
-                                    .strong()
-                                    .color(t.text_primary()),
-                                ));
-                                ui.add_space(4.0);
-                                ui.label(
-                                    egui::RichText::new(&self.status_message)
-                                        .size(12.0)
-                                        .color(t.text_dim()),
-                                );
-                            });
-                        }
-                    );
+                    ui.allocate_ui_with_layout(egui::vec2(left_w, ui.available_height()), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_width(left_w);
+                        ui.vertical(|ui| {
+                            ui.add(egui::Label::new(egui::RichText::new(self.audio_engine.get_current_song().map(|t| Self::truncate_text(&t, 40)).unwrap_or_else(|| "No track selected".to_string())).size(15.0).strong().color(t.text_primary())));
+                            ui.add_space(4.0);
+                            ui.label(egui::RichText::new(&self.status_message).size(12.0).color(t.text_dim()));
+                        });
+                    });
 
-                    // Center: Controls & Progress on one line
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(center_w, ui.available_height()),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.set_min_width(center_w);
-                            let fixed_w = 230.0 + 8.0 + 90.0; // buttons + spacing + text labels
-                            let slider_w = (center_w - fixed_w).clamp(50.0, 400.0);
-                            let content_w = fixed_w + slider_w;
-                            let padding = (center_w - content_w) / 2.0;
-                            
-                            ui.add_space(padding.max(0.0));
-                            
-                            // Buttons first
-                            self.render_playback_buttons(ui);
-                            
-                            ui.add_space(8.0);
-                            
-                            // Progress bar
-                            self.render_progress(ui, slider_w + 90.0);
-                        }
-                    );
+                    ui.allocate_ui_with_layout(egui::vec2(center_w, ui.available_height()), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_width(center_w);
+                        let fixed_w = 230.0 + 8.0 + 90.0;
+                        let slider_w = (center_w - fixed_w).clamp(50.0, 400.0);
+                        let content_w = fixed_w + slider_w;
+                        let padding = (center_w - content_w) / 2.0;
+                        ui.add_space(padding.max(0.0));
+                        self.render_playback_buttons(ui);
+                        ui.add_space(8.0);
+                        self.render_progress(ui, slider_w + 90.0);
+                    });
 
-                    // Right: Volume
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(right_w, ui.available_height()),
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            ui.set_min_width(right_w);
-                            ui.add_space(20.0); // Right margin
-                            self.render_volume(ui);
-                        }
-                    );
+                    ui.allocate_ui_with_layout(egui::vec2(right_w, ui.available_height()), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.set_min_width(right_w);
+                        ui.add_space(20.0);
+                        self.render_volume(ui);
+                    });
                 });
             });
     }
 
     fn render_playback_buttons(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        
-        // Shuffle
         let shuffle_color = if self.playlist.shuffle { t.accent() } else { t.text_dim() };
-        let shuffle_btn = egui::Button::new(egui::RichText::new("🔀").size(16.0).color(shuffle_color))
-            .fill(egui::Color32::TRANSPARENT)
-            .min_size(egui::vec2(32.0, 32.0));
-        if ui.add(shuffle_btn).clicked() {
+        if ui.add(egui::Button::new(egui::RichText::new("🔀").size(16.0).color(shuffle_color)).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(32.0, 32.0))).clicked() {
             self.playlist.shuffle = !self.playlist.shuffle;
         }
 
         ui.add_space(10.0);
 
-        // Previous
-        let prev_btn = egui::Button::new(egui::RichText::new("⏮").size(20.0).color(t.text_primary()))
-            .fill(egui::Color32::TRANSPARENT)
-            .min_size(egui::vec2(40.0, 40.0));
-        if ui.add(prev_btn).clicked() {
+        if ui.add(egui::Button::new(egui::RichText::new("⏮").size(20.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(40.0, 40.0))).clicked() {
             self.play_previous();
         }
 
         ui.add_space(10.0);
 
-        // Play/Pause
         let play_icon = if self.is_playing && !self.is_paused { "⏸" } else { "▶" };
-        let play_btn = egui::Button::new(egui::RichText::new(play_icon).size(24.0).color(t.bg_main()))
-            .fill(t.accent())
-            .corner_radius(egui::CornerRadius::same(25))
-            .min_size(egui::vec2(45.0, 45.0));
-        if ui.add(play_btn).clicked() {
+        if ui.add(egui::Button::new(egui::RichText::new(play_icon).size(24.0).color(t.bg_main())).fill(t.accent()).corner_radius(egui::CornerRadius::same(25)).min_size(egui::vec2(45.0, 45.0))).clicked() {
             self.toggle_play_pause();
         }
 
         ui.add_space(10.0);
 
-        // Next
-        let next_btn = egui::Button::new(egui::RichText::new("⏭").size(20.0).color(t.text_primary()))
-            .fill(egui::Color32::TRANSPARENT)
-            .min_size(egui::vec2(40.0, 40.0));
-        if ui.add(next_btn).clicked() {
+        if ui.add(egui::Button::new(egui::RichText::new("⏭").size(20.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(40.0, 40.0))).clicked() {
             self.play_next();
         }
 
         ui.add_space(10.0);
 
-        // Repeat
         let repeat_color = if self.playlist.repeat { t.accent() } else { t.text_dim() };
-        let repeat_btn = egui::Button::new(egui::RichText::new("🔁").size(16.0).color(repeat_color))
-            .fill(egui::Color32::TRANSPARENT)
-            .min_size(egui::vec2(32.0, 32.0));
-        if ui.add(repeat_btn).clicked() {
+        if ui.add(egui::Button::new(egui::RichText::new("🔁").size(16.0).color(repeat_color)).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(32.0, 32.0))).clicked() {
             self.playlist.repeat = !self.playlist.repeat;
         }
     }
@@ -690,87 +500,103 @@ impl RustMusicApp {
         let position = self.audio_engine.get_position();
         let duration = self.audio_engine.get_duration();
 
-        ui.label(
-            egui::RichText::new(Self::format_time(position))
-                .size(12.0)
-                .color(t.text_dim()),
-        );
+        ui.label(egui::RichText::new(Self::format_time(position)).size(12.0).color(t.text_dim()));
 
-        let mut progress = if duration > 0.0 {
-            (position / duration) as f32
-        } else {
-            0.0
-        };
-        
+        let mut progress = if duration > 0.0 { (position / duration) as f32 } else { 0.0 };
         let slider_w = (full_width - 90.0).max(100.0);
         let orig_w = ui.spacing().slider_width;
         ui.spacing_mut().slider_width = slider_w;
         
         let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
         if ui.add(slider).drag_stopped() {
-            let new_pos = progress as f64 * duration;
-            self.audio_engine.seek(new_pos);
+            self.audio_engine.seek(progress as f64 * duration);
         }
         
         ui.spacing_mut().slider_width = orig_w;
 
-        ui.label(
-            egui::RichText::new(Self::format_time(duration))
-                .size(12.0)
-                .color(t.text_dim()),
-        );
+        ui.label(egui::RichText::new(Self::format_time(duration)).size(12.0).color(t.text_dim()));
     }
 
     fn render_volume(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        let volume_icon = if self.volume == 0.0 {
-            "🔇"
-        } else if self.volume < 0.3 {
-            "🔈"
-        } else if self.volume < 0.7 {
-            "🔉"
-        } else {
-            "🔊"
-        };
+        let volume_icon = if self.volume == 0.0 { "🔇" } else if self.volume < 0.3 { "🔈" } else if self.volume < 0.7 { "🔉" } else { "🔊" };
         ui.label(egui::RichText::new(volume_icon).size(18.0).color(t.text_primary()));
         
         let mut vol = self.volume;
-        ui.add_sized(
-            egui::vec2(100.0, 20.0),
-            egui::Slider::new(&mut vol, 0.0..=1.0).show_value(false),
-        );
+        ui.add_sized(egui::vec2(100.0, 20.0), egui::Slider::new(&mut vol, 0.0..=1.0).show_value(false));
         if vol != self.volume {
             self.volume = vol;
             self.audio_engine.set_volume(self.volume);
         }
     }
+
+    fn render_mini_player(&mut self, ctx: &egui::Context) {
+        let t = self.theme;
+        
+        egui::Window::new("🎵 Mini Player")
+            .resizable(false)
+            .default_size([400.0, 140.0])
+            .min_size([300.0, 120.0])
+            .frame(egui::Frame {
+                fill: t.bg_surface(),
+                corner_radius: egui::CornerRadius::same(12),
+                inner_margin: egui::Margin::same(16),
+                ..Default::default()
+            })
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        let song_title = self.audio_engine.get_current_song().unwrap_or_else(|| "No track".to_string());
+                        ui.label(egui::RichText::new(song_title).size(16.0).strong().color(t.text_primary()));
+                    });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(egui::Button::new(egui::RichText::new("✕").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(24.0, 24.0))).clicked() {
+                            self.mini_mode = false;
+                        }
+                    });
+                });
+
+                ui.add_space(12.0);
+                self.render_progress(ui, ui.available_width());
+                ui.add_space(12.0);
+
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        self.render_playback_buttons(ui);
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.render_volume(ui);
+                    });
+                });
+            });
+    }
 }
 
 impl eframe::App for RustMusicApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Process audio engine status updates
+        // Resize window when entering/exiting mini mode
+        if self.mini_mode != self.prev_mini_mode {
+            if self.mini_mode {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(400.0, 140.0)));
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1000.0, 700.0)));
+            }
+            self.prev_mini_mode = self.mini_mode;
+        }
+
         while let Some(status) = self.audio_engine.check_status() {
             match status {
-                AudioStatus::Playing => {
-                    self.is_playing = true;
-                    self.is_paused = false;
-                }
-                AudioStatus::Paused => {
-                    self.is_paused = true;
-                }
-                AudioStatus::Stopped => {
-                    self.is_playing = false;
-                    self.is_paused = false;
-                }
+                AudioStatus::Playing => { self.is_playing = true; self.is_paused = false; }
+                AudioStatus::Paused => { self.is_paused = true; }
+                AudioStatus::Stopped => { self.is_playing = false; self.is_paused = false; }
                 AudioStatus::Finished => {
                     self.is_playing = false;
                     self.is_paused = false;
                     if !self.playlist.is_empty() {
                         if self.playlist.repeat {
                             self.play_next();
-                        } else if self.playlist.current_index.is_some()
-                            && self.playlist.current_index.unwrap() + 1 < self.playlist.len()
-                        {
+                        } else if self.playlist.current_index.is_some() && self.playlist.current_index.unwrap() + 1 < self.playlist.len() {
                             self.play_next();
                         }
                     }
@@ -781,36 +607,25 @@ impl eframe::App for RustMusicApp {
             }
         }
 
-        // Main background
-        egui::CentralPanel::default()
-            .frame(egui::Frame {
-                fill: self.theme.bg_main(),
-                ..Default::default()
-            })
-            .show(ctx, |ui| {
-                // Menu bar at top
-                self.render_menu_bar(ui);
+        if self.mini_mode {
+            self.render_mini_player(ctx);
+        } else {
+            egui::CentralPanel::default()
+                .frame(egui::Frame { fill: self.theme.bg_main(), ..Default::default() })
+                .show(ctx, |ui| {
+                    self.render_menu_bar(ui);
+                    let clicked_index = egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| self.render_playlist(ui)).inner;
+                    if let Some(idx) = clicked_index {
+                        self.play_song(idx);
+                    }
+                });
+            self.render_player_bar(ctx);
+        }
 
-                // Playlist in scrollable area
-                let clicked_index = egui::ScrollArea::vertical()
-                    .auto_shrink([false; 2])
-                    .show(ui, |ui| self.render_playlist(ui))
-                    .inner;
-
-                if let Some(idx) = clicked_index {
-                    self.play_song(idx);
-                }
-            });
-
-        // Player bar at bottom
-        self.render_player_bar(ctx);
-
-        // Settings window
         if self.show_settings {
             self.render_settings_window(ctx);
         }
 
-        // Keyboard shortcuts
         let input = ctx.input(|i| i.clone());
         if input.key_pressed(egui::Key::Space) {
             if self.is_playing && !self.is_paused {
@@ -828,12 +643,8 @@ impl eframe::App for RustMusicApp {
                 self.status_message = format!("Now playing: {}", song.title);
             }
         }
-        if input.key_pressed(egui::Key::ArrowLeft) {
-            self.play_previous();
-        }
-        if input.key_pressed(egui::Key::ArrowRight) {
-            self.play_next();
-        }
+        if input.key_pressed(egui::Key::ArrowLeft) { self.play_previous(); }
+        if input.key_pressed(egui::Key::ArrowRight) { self.play_next(); }
         if input.key_pressed(egui::Key::R) {
             self.playlist.repeat = !self.playlist.repeat;
             self.status_message = format!("Repeat: {}", if self.playlist.repeat { "ON" } else { "OFF" });
@@ -843,14 +654,12 @@ impl eframe::App for RustMusicApp {
             self.status_message = format!("Shuffle: {}", if self.playlist.shuffle { "ON" } else { "OFF" });
         }
 
-        // Only repaint continuously when audio is playing (for progress bar updates)
         if self.is_playing && !self.is_paused {
             ctx.request_repaint();
         }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        // Save config on exit
         self.save_config();
     }
 }
