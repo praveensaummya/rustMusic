@@ -31,6 +31,7 @@ pub struct AudioEngine {
     current_position: Arc<Mutex<f64>>,
     total_duration: Arc<Mutex<f64>>,
     current_song: Arc<Mutex<Option<String>>>,
+    position_offset: Arc<Mutex<f64>>,
 }
 
 impl AudioEngine {
@@ -40,10 +41,12 @@ impl AudioEngine {
         let current_position = Arc::new(Mutex::new(0.0));
         let total_duration = Arc::new(Mutex::new(0.0));
         let current_song = Arc::new(Mutex::new(None));
+        let position_offset = Arc::new(Mutex::new(0.0));
 
         let pos = current_position.clone();
         let dur = total_duration.clone();
         let song = current_song.clone();
+        let offset = position_offset.clone();
 
         thread::spawn(move || {
             let (_stream, stream_handle) = match OutputStream::try_default() {
@@ -63,17 +66,22 @@ impl AudioEngine {
             let mut current_file: Option<PathBuf> = None;
 
             loop {
-                // Update position if playing
+                // Update position if playing: get_pos() + offset so seek position persists
                 if let Some(ref s) = sink {
                     if !s.empty() && !is_paused {
                         if let Ok(mut p) = pos.lock() {
-                            *p = s.get_pos().as_secs_f64();
+                            if let Ok(mut o) = offset.lock() {
+                                *p = s.get_pos().as_secs_f64() + *o;
+                            }
                         }
                     }
-                    if s.empty() && !is_paused && sink.is_some() {
+                    if s.empty() && !is_paused {
                         let _ = status_tx.send(AudioStatus::Finished);
                         if let Ok(mut p) = pos.lock() {
                             *p = 0.0;
+                        }
+                        if let Ok(mut o) = offset.lock() {
+                            *o = 0.0;
                         }
                         sink = None;
                         current_file = None;
@@ -103,6 +111,9 @@ impl AudioEngine {
                                         }
                                         if let Ok(mut p) = pos.lock() {
                                             *p = 0.0;
+                                        }
+                                        if let Ok(mut o) = offset.lock() {
+                                            *o = 0.0;
                                         }
                                         if let Ok(mut s) = song.lock() {
                                             *s = p
@@ -155,14 +166,15 @@ impl AudioEngine {
                         if let Ok(mut p) = pos.lock() {
                             *p = 0.0;
                         }
+                        if let Ok(mut o) = offset.lock() {
+                            *o = 0.0;
+                        }
                         if let Ok(mut s) = song.lock() {
                             *s = None;
                         }
                         let _ = status_tx.send(AudioStatus::Stopped);
                     }
                     Ok(AudioCommand::Seek(target_pos)) => {
-                        // Seek by restarting playback at the target position
-                        // Do NOT reset position to 0.0 - set it directly to target
                         if let Some(ref file_path) = current_file {
                             if let Some(ref s) = sink {
                                 s.stop();
@@ -184,9 +196,14 @@ impl AudioEngine {
                                             let seek_pos = target_pos.min(total_secs).max(0.0);
                                             let skipped = source.skip_duration(Duration::from_secs_f64(seek_pos));
 
-                                            // Set position directly to seek target (not 0)
+                                            // Set position offset so get_pos() + offset = seek_pos
+                                            // The new sink's get_pos() starts near 0, so we store
+                                            // the seek position as an offset
                                             if let Ok(mut p) = pos.lock() {
                                                 *p = seek_pos;
+                                            }
+                                            if let Ok(mut o) = offset.lock() {
+                                                *o = seek_pos;
                                             }
 
                                             let new_sink =
@@ -241,6 +258,7 @@ impl AudioEngine {
             current_position,
             total_duration,
             current_song,
+            position_offset,
         }
     }
 

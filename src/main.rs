@@ -1,5 +1,7 @@
 mod audio;
 mod playlist;
+mod config;
+mod theme;
 mod ui;
 
 use eframe::egui;

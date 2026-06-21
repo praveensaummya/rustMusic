@@ -1,5 +1,7 @@
 use crate::audio::{AudioEngine, AudioStatus};
+use crate::config::AppConfig;
 use crate::playlist::{Playlist, Song};
+use crate::theme::Theme;
 use eframe::egui;
 use rfd::FileDialog;
 use std::path::PathBuf;
@@ -13,20 +15,72 @@ pub struct RustMusicApp {
     pub search_query: String,
     pub status_message: String,
     pub last_folder: Option<PathBuf>,
+    pub theme: Theme,
+    pub config: AppConfig,
+    pub show_settings: bool,
 }
 
 impl RustMusicApp {
-    pub fn new(_cc: &eframe::CreationContext) -> Self {
-        RustMusicApp {
+    pub fn new(cc: &eframe::CreationContext) -> Self {
+        let config = AppConfig::load();
+        let theme = Theme::from_name(&config.theme);
+        let volume = config.volume;
+        let last_folder = config
+            .last_folder
+            .as_ref()
+            .map(|s| PathBuf::from(s));
+
+        // Apply egui visual style
+        Self::apply_theme(&cc.egui_ctx, theme);
+
+        let mut app = RustMusicApp {
             audio_engine: AudioEngine::new(),
             playlist: Playlist::new("Default"),
-            volume: 0.8,
+            volume,
             is_playing: false,
             is_paused: false,
             search_query: String::new(),
             status_message: "Welcome to RustMusic!".to_string(),
-            last_folder: None,
+            last_folder: last_folder.clone(),
+            theme,
+            config,
+            show_settings: false,
+        };
+
+        // Auto-load last folder if set
+        if let Some(ref folder) = last_folder {
+            app.load_folder(folder.clone());
+            app.status_message = format!(
+                "Loaded {} songs from last session",
+                app.playlist.len()
+            );
         }
+
+        app
+    }
+
+    fn apply_theme(ctx: &egui::Context, theme: Theme) {
+        let mut style = (*ctx.style()).clone();
+
+        // Override visual colors
+        style.visuals.dark_mode = matches!(theme, Theme::Dark | Theme::Midnight | Theme::Ocean | Theme::Forest);
+
+        style.visuals.window_fill = theme.settings_bg();
+        style.visuals.panel_fill = theme.bg_main();
+
+        ctx.set_style(style);
+    }
+
+    fn save_config(&self) {
+        // Preserve existing config but update fields
+        let mut config = self.config.clone();
+        config.theme = self.theme.name().to_string();
+        config.volume = self.volume;
+        config.last_folder = self
+            .last_folder
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string());
+        config.save();
     }
 
     fn format_time(secs: f64) -> String {
@@ -91,6 +145,7 @@ impl RustMusicApp {
         } else {
             self.status_message = "No music files found in selected folder".to_string();
         }
+        self.save_config();
     }
 
     fn play_song(&mut self, index: usize) {
@@ -141,10 +196,11 @@ impl RustMusicApp {
     }
 
     fn render_menu_bar(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
         egui::TopBottomPanel::top("menu_bar")
             .min_height(40.0)
             .frame(egui::Frame {
-                fill: egui::Color32::from_rgb(30, 30, 30),
+                fill: t.bg_surface(),
                 ..Default::default()
             })
             .show_inside(ui, |ui| {
@@ -153,7 +209,7 @@ impl RustMusicApp {
                         egui::RichText::new("🎵 RustMusic")
                             .size(18.0)
                             .strong()
-                            .color(egui::Color32::from_rgb(0, 200, 150)),
+                            .color(t.accent()),
                     );
                     ui.separator();
 
@@ -188,13 +244,20 @@ impl RustMusicApp {
                         }
                     }
 
+                    ui.add_space(10.0);
+
+                    // Settings button
+                    if ui.button("⚙️Settings").clicked() {
+                        self.show_settings = !self.show_settings;
+                    }
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add(
                             egui::TextEdit::singleline(&mut self.search_query)
                                 .hint_text("🔍 Search songs...")
                                 .desired_width(200.0)
-                                .text_color(egui::Color32::WHITE)
-                                .background_color(egui::Color32::from_rgb(50, 50, 50)),
+                                .text_color(t.text_primary())
+                                .background_color(t.search_bg()),
                         );
                     });
                 });
@@ -202,6 +265,7 @@ impl RustMusicApp {
     }
 
     fn render_playlist(&mut self, ui: &mut egui::Ui) -> Option<usize> {
+        let t = self.theme;
         let mut clicked_index: Option<usize> = None;
         let songs = self.get_filtered_songs();
 
@@ -211,39 +275,39 @@ impl RustMusicApp {
                 ui.label(
                     egui::RichText::new("🎵")
                         .size(48.0)
-                        .color(egui::Color32::from_rgb(100, 100, 100)),
+                        .color(t.text_dim()),
                 );
                 ui.add_space(10.0);
                 ui.label(
                     egui::RichText::new("No songs in playlist")
                         .size(16.0)
-                        .color(egui::Color32::from_rgb(150, 150, 150)),
+                        .color(t.text_secondary()),
                 );
                 ui.add_space(5.0);
                 ui.label(
                     egui::RichText::new("Click 'Open Folder' or 'Add Files' to get started")
                         .size(12.0)
-                        .color(egui::Color32::from_rgb(120, 120, 120)),
+                        .color(t.text_dim()),
                 );
             });
         } else {
             // Table header
             egui::Frame::new()
-                .fill(egui::Color32::from_rgb(35, 35, 35))
+                .fill(t.bg_header())
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_space(10.0);
                         ui.label(
                             egui::RichText::new("#")
                                 .size(12.0)
-                                .color(egui::Color32::from_rgb(150, 150, 150)),
+                                .color(t.text_dim()),
                         );
                         ui.add_space(30.0);
                         ui.label(
                             egui::RichText::new("TITLE")
                                 .size(12.0)
                                 .strong()
-                                .color(egui::Color32::from_rgb(150, 150, 150)),
+                                .color(t.text_dim()),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.add_space(10.0);
@@ -255,11 +319,11 @@ impl RustMusicApp {
             for (i, (original_index, song)) in songs.iter().enumerate() {
                 let is_current = self.playlist.current_index == Some(*original_index);
                 let bg_color = if is_current {
-                    egui::Color32::from_rgb(0, 80, 60)
+                    t.bg_row_current()
                 } else if i % 2 == 0 {
-                    egui::Color32::from_rgb(25, 25, 25)
+                    t.bg_row_even()
                 } else {
-                    egui::Color32::from_rgb(30, 30, 30)
+                    t.bg_row_odd()
                 };
 
                 let response = egui::Frame::new()
@@ -271,13 +335,13 @@ impl RustMusicApp {
                                 ui.label(
                                     egui::RichText::new("▶")
                                         .size(14.0)
-                                        .color(egui::Color32::from_rgb(0, 200, 150)),
+                                        .color(t.accent()),
                                 );
                             } else {
                                 ui.label(
                                     egui::RichText::new(format!("{}", original_index + 1))
                                         .size(12.0)
-                                        .color(egui::Color32::from_rgb(120, 120, 120)),
+                                        .color(t.text_dim()),
                                 );
                             }
                             ui.add_space(15.0);
@@ -288,9 +352,9 @@ impl RustMusicApp {
                                     egui::RichText::new(truncated_title)
                                         .size(14.0)
                                         .color(if is_current {
-                                            egui::Color32::from_rgb(0, 200, 150)
+                                            t.accent()
                                         } else {
-                                            egui::Color32::WHITE
+                                            t.text_primary()
                                         }),
                                 );
                                 if let Some(artist) = &song.artist {
@@ -298,7 +362,7 @@ impl RustMusicApp {
                                     ui.label(
                                         egui::RichText::new(truncated_artist)
                                             .size(11.0)
-                                            .color(egui::Color32::from_rgb(140, 140, 140)),
+                                            .color(t.text_secondary()),
                                     );
                                 }
                             });
@@ -311,7 +375,7 @@ impl RustMusicApp {
                                         ui.label(
                                             egui::RichText::new(Self::format_time(song.duration_secs))
                                                 .size(12.0)
-                                                .color(egui::Color32::from_rgb(140, 140, 140)),
+                                                .color(t.text_dim()),
                                         );
                                     },
                                 );
@@ -333,11 +397,151 @@ impl RustMusicApp {
         clicked_index
     }
 
+    fn render_settings_window(&mut self, ctx: &egui::Context) {
+        // Extract all data before the window to avoid borrow conflicts
+        let show = &mut self.show_settings;
+        let theme_current = self.theme;
+        let volume_current = self.volume;
+        let has_folder = self.last_folder.is_some();
+        let folder_display = self.last_folder.as_ref().map(|f| format!("{}", f.display()));
+
+        // Local state for the settings window
+        let mut selected_theme = theme_current;
+        let mut theme_changed = false;
+        let mut new_volume = volume_current;
+        let mut vol_changed = false;
+
+        egui::Window::new("⚙️ Settings")
+            .open(show)
+            .resizable(true)
+            .default_size([400.0, 350.0])
+            .frame(egui::Frame {
+                fill: theme_current.settings_bg(),
+                ..Default::default()
+            })
+            .show(ctx, |ui| {
+                // Theme selection
+                ui.label(
+                    egui::RichText::new("🎨 Theme")
+                        .size(16.0)
+                        .strong()
+                        .color(theme_current.text_primary()),
+                );
+                ui.add_space(5.0);
+
+                for theme_variant in Theme::all() {
+                    let is_selected = selected_theme == *theme_variant;
+                    let label = if is_selected {
+                        format!("● {}", theme_variant.name())
+                    } else {
+                        format!("○ {}", theme_variant.name())
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new(&label)
+                                    .color(if is_selected {
+                                        theme_variant.accent()
+                                    } else {
+                                        theme_current.text_secondary()
+                                    }),
+                            )
+                            .fill(theme_current.btn_bg())
+                            .min_size(egui::vec2(180.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        selected_theme = *theme_variant;
+                        theme_changed = true;
+                        Self::apply_theme(ctx, selected_theme);
+                    }
+                }
+
+                ui.add_space(15.0);
+                ui.separator();
+                ui.add_space(10.0);
+
+                // Volume
+                ui.label(
+                    egui::RichText::new("🔊 Default Volume")
+                        .size(16.0)
+                        .strong()
+                        .color(theme_current.text_primary()),
+                );
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{:.0}%", new_volume * 100.0))
+                            .color(theme_current.text_secondary()),
+                    );
+                    ui.add_sized(
+                        egui::vec2(200.0, 20.0),
+                        egui::Slider::new(&mut new_volume, 0.0..=1.0).show_value(false),
+                    );
+                });
+                if new_volume != volume_current {
+                    vol_changed = true;
+                }
+
+                ui.add_space(15.0);
+                ui.separator();
+                ui.add_space(10.0);
+
+                // Last folder info
+                if has_folder {
+                    if let Some(ref display) = folder_display {
+                        ui.label(
+                            egui::RichText::new("📁 Last Session Folder")
+                                .size(16.0)
+                                .strong()
+                                .color(theme_current.text_primary()),
+                        );
+                        ui.add_space(5.0);
+                        ui.label(
+                            egui::RichText::new(display)
+                                .size(12.0)
+                                .color(theme_current.text_secondary()),
+                        );
+                    }
+                }
+
+                ui.add_space(20.0);
+
+                // Save button
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("💾 Save Preferences").size(14.0),
+                        )
+                        .fill(theme_current.accent_dim())
+                        .min_size(egui::vec2(180.0, 32.0)),
+                    )
+                    .clicked()
+                {
+                    // Signal save - will be handled after window closes
+                }
+            });
+
+        // Apply changes after window closes (no borrow conflict)
+        if theme_changed {
+            self.theme = selected_theme;
+        }
+        if vol_changed {
+            self.volume = new_volume;
+            self.audio_engine.set_volume(self.volume);
+        }
+        if theme_changed || vol_changed {
+            self.save_config();
+            self.status_message = "Preferences saved!".to_string();
+        }
+    }
+
     fn render_player_bar(&mut self, ctx: &egui::Context) {
+        let t = self.theme;
         egui::TopBottomPanel::bottom("player_bar")
             .min_height(80.0)
             .frame(egui::Frame {
-                fill: egui::Color32::from_rgb(40, 40, 40),
+                fill: t.bg_player(),
                 ..Default::default()
             })
             .show(ctx, |ui| {
@@ -353,12 +557,12 @@ impl RustMusicApp {
                             )
                             .size(14.0)
                             .strong()
-                            .color(egui::Color32::WHITE),
+                            .color(t.text_primary()),
                         ));
                         ui.label(
                             egui::RichText::new(&self.status_message)
                                 .size(11.0)
-                                .color(egui::Color32::from_rgb(120, 120, 120)),
+                                .color(t.text_dim()),
                         );
                     });
 
@@ -385,9 +589,10 @@ impl RustMusicApp {
     }
 
     fn render_controls(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
         ui.horizontal(|ui| {
             let prev_btn = egui::Button::new(egui::RichText::new("⏮").size(20.0))
-                .fill(egui::Color32::from_rgb(50, 50, 50))
+                .fill(t.btn_bg())
                 .min_size(egui::vec2(40.0, 40.0));
             if ui.add(prev_btn).clicked() {
                 self.play_previous();
@@ -401,7 +606,7 @@ impl RustMusicApp {
                 "▶"
             };
             let play_btn = egui::Button::new(egui::RichText::new(play_icon).size(24.0))
-                .fill(egui::Color32::from_rgb(0, 180, 130))
+                .fill(t.btn_play())
                 .min_size(egui::vec2(50.0, 40.0));
             if ui.add(play_btn).clicked() {
                 self.toggle_play_pause();
@@ -410,7 +615,7 @@ impl RustMusicApp {
             ui.add_space(10.0);
 
             let next_btn = egui::Button::new(egui::RichText::new("⏭").size(20.0))
-                .fill(egui::Color32::from_rgb(50, 50, 50))
+                .fill(t.btn_bg())
                 .min_size(egui::vec2(40.0, 40.0));
             if ui.add(next_btn).clicked() {
                 self.play_next();
@@ -419,30 +624,31 @@ impl RustMusicApp {
     }
 
     fn render_shuffle_repeat(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
         ui.horizontal(|ui| {
             let shuffle_color = if self.playlist.shuffle {
-                egui::Color32::from_rgb(0, 200, 150)
+                t.accent()
             } else {
-                egui::Color32::from_rgb(120, 120, 120)
+                t.text_dim()
             };
             let shuffle_btn = egui::Button::new(
                 egui::RichText::new("🔀").size(16.0).color(shuffle_color),
             )
-            .fill(egui::Color32::from_rgb(50, 50, 50))
+            .fill(t.btn_bg())
             .min_size(egui::vec2(32.0, 32.0));
             if ui.add(shuffle_btn).clicked() {
                 self.playlist.shuffle = !self.playlist.shuffle;
             }
 
             let repeat_color = if self.playlist.repeat {
-                egui::Color32::from_rgb(0, 200, 150)
+                t.accent()
             } else {
-                egui::Color32::from_rgb(120, 120, 120)
+                t.text_dim()
             };
             let repeat_btn = egui::Button::new(
                 egui::RichText::new("🔁").size(16.0).color(repeat_color),
             )
-            .fill(egui::Color32::from_rgb(50, 50, 50))
+            .fill(t.btn_bg())
             .min_size(egui::vec2(32.0, 32.0));
             if ui.add(repeat_btn).clicked() {
                 self.playlist.repeat = !self.playlist.repeat;
@@ -451,6 +657,7 @@ impl RustMusicApp {
     }
 
     fn render_progress(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
         let position = self.audio_engine.get_position();
         let duration = self.audio_engine.get_duration();
 
@@ -460,7 +667,7 @@ impl RustMusicApp {
                 ui.label(
                     egui::RichText::new(Self::format_time(position))
                         .size(12.0)
-                        .color(egui::Color32::from_rgb(180, 180, 180)),
+                        .color(t.text_dim()),
                 );
 
                 let mut progress = if duration > 0.0 {
@@ -477,13 +684,14 @@ impl RustMusicApp {
                 ui.label(
                     egui::RichText::new(Self::format_time(duration))
                         .size(12.0)
-                        .color(egui::Color32::from_rgb(180, 180, 180)),
+                        .color(t.text_dim()),
                 );
             });
         });
     }
 
     fn render_volume(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
         ui.horizontal(|ui| {
             let volume_icon = if self.volume == 0.0 {
                 "🔇"
@@ -541,10 +749,10 @@ impl eframe::App for RustMusicApp {
             }
         }
 
-        // Main layout
+        // Main background
         egui::CentralPanel::default()
             .frame(egui::Frame {
-                fill: egui::Color32::from_rgb(18, 18, 18),
+                fill: self.theme.bg_main(),
                 ..Default::default()
             })
             .show(ctx, |ui| {
@@ -565,6 +773,16 @@ impl eframe::App for RustMusicApp {
         // Player bar at bottom
         self.render_player_bar(ctx);
 
+        // Settings window
+        if self.show_settings {
+            self.render_settings_window(ctx);
+        }
+
         ctx.request_repaint();
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // Save config on exit
+        self.save_config();
     }
 }
