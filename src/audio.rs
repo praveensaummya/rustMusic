@@ -204,7 +204,9 @@ impl AudioEngine {
                                     let reader = BufReader::new(file);
                                     match Decoder::new(reader) {
                                         Ok(source) => {
-                                            let skipped = source.skip_duration(Duration::from_secs_f64(seek_pos));
+                                            // Note: skip_duration on a fresh decoder can panic on Windows
+                                            // due to a rodio/symphonia bug. We append the full source
+                                            // and rely on sink.try_seek() below for positioning.
                                             
                                             if let Ok(mut p) = pos.lock() {
                                                 *p = seek_pos;
@@ -215,8 +217,14 @@ impl AudioEngine {
 
                                             let new_sink = Sink::try_new(&stream_handle).unwrap();
                                             new_sink.set_volume(volume);
-                                            new_sink.append(skipped);
+                                            new_sink.append(source);
                                             sink = Some(new_sink);
+
+                                            // Try to seek the sink to the target position
+                                            // This is safer than skip_duration on fresh decoders
+                                            if let Some(ref s) = sink {
+                                                let _ = s.try_seek(Duration::from_secs_f64(seek_pos));
+                                            }
 
                                             if !is_paused {
                                                 let _ = status_tx.send(AudioStatus::Playing);
