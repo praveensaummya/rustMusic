@@ -10,13 +10,10 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
         include:
           - os: ubuntu-latest
             artifact_name: rustmusic-linux-x64
-            binary_name: rustmusic
-          - os: macos-latest
-            artifact_name: rustmusic-macos-x64
             binary_name: rustmusic
           - os: windows-latest
             artifact_name: rustmusic-windows-x64
@@ -45,8 +42,8 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
-      - name: Strip binary (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+      - name: Strip binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: strip target/release/${{ matrix.binary_name }}
 
       - name: Upload artifact
