@@ -812,6 +812,39 @@ impl eframe::App for RustMusicApp {
             self.render_settings_window(ctx);
         }
 
+        // Keyboard shortcuts
+        let input = ctx.input(|i| i.clone());
+        if input.key_pressed(egui::Key::Space) {
+            if self.is_playing && !self.is_paused {
+                self.audio_engine.pause();
+                self.is_paused = true;
+                self.status_message = "Paused".to_string();
+            } else if self.is_playing && self.is_paused {
+                self.audio_engine.resume();
+                self.is_paused = false;
+                self.status_message = "Resumed".to_string();
+            } else if let Some(song) = self.playlist.get_current_song() {
+                self.audio_engine.play(song.path.clone());
+                self.is_playing = true;
+                self.is_paused = false;
+                self.status_message = format!("Now playing: {}", song.title);
+            }
+        }
+        if input.key_pressed(egui::Key::ArrowLeft) {
+            self.play_previous();
+        }
+        if input.key_pressed(egui::Key::ArrowRight) {
+            self.play_next();
+        }
+        if input.key_pressed(egui::Key::R) {
+            self.playlist.repeat = !self.playlist.repeat;
+            self.status_message = format!("Repeat: {}", if self.playlist.repeat { "ON" } else { "OFF" });
+        }
+        if input.key_pressed(egui::Key::S) {
+            self.playlist.shuffle = !self.playlist.shuffle;
+            self.status_message = format!("Shuffle: {}", if self.playlist.shuffle { "ON" } else { "OFF" });
+        }
+
         ctx.request_repaint();
     }
 
