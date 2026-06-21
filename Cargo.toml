@@ -24,6 +24,9 @@ lofty = "0.22"
 # File path handling
 symphonia = { version = "0.5", features = ["all"] }
 
+# Image loading for icons
+image = "0.25"
+
 # Threading
 crossbeam-channel = "0.5"
 

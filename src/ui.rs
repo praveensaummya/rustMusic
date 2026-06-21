@@ -204,15 +204,15 @@ impl RustMusicApp {
                     );
                     ui.separator();
 
-                    let menu_btn = |text: &str| {
-                        egui::Button::new(egui::RichText::new(text).size(13.0).color(t.text_primary()))
+                    let menu_btn = |label: egui::RichText| {
+                        egui::Button::new(label)
                             .fill(t.btn_bg())
                             .corner_radius(egui::CornerRadius::same(6))
                             .min_size(egui::vec2(0.0, 28.0))
                     };
 
                     ui.add_space(8.0);
-                    if ui.add(menu_btn("📂 Open Folder")).clicked() {
+                    if ui.add(menu_btn(egui::RichText::new("📂 Open Folder").size(13.0).color(t.text_primary()))).clicked() {
                         if let Some(dir) = FileDialog::new()
                             .set_title("Select Music Folder")
                             .pick_folder()
@@ -223,7 +223,7 @@ impl RustMusicApp {
 
                     if self.last_folder.is_some() {
                         ui.add_space(4.0);
-                        if ui.add(menu_btn("🔄 Refresh")).clicked() {
+                        if ui.add(menu_btn(egui::RichText::new("🔄 Refresh").size(13.0).color(t.text_primary()))).clicked() {
                             if let Some(ref dir) = self.last_folder.clone() {
                                 self.load_folder(dir.clone());
                             }
@@ -231,7 +231,7 @@ impl RustMusicApp {
                     }
 
                     ui.add_space(4.0);
-                    if ui.add(menu_btn("➕ Add Files")).clicked() {
+                        if ui.add(menu_btn(egui::RichText::new("➕ Add Files").size(13.0).color(t.text_primary()))).clicked() {
                         if let Some(files) = FileDialog::new()
                             .set_title("Select Music Files")
                             .add_filter("Audio Files", &["mp3", "wav", "flac", "ogg", "m4a"])
@@ -247,11 +247,11 @@ impl RustMusicApp {
 
                     ui.add_space(10.0);
 
-                    if ui.add(menu_btn("🪟 Mini Mode")).clicked() {
+                    if ui.add(menu_btn(egui::RichText::new("▼ Mini Mode").size(13.0).color(t.text_primary()))).clicked() {
                         self.mini_mode = !self.mini_mode;
                     }
 
-                    if ui.add(menu_btn("⚙ Settings")).clicked() {
+                    if ui.add(menu_btn(egui::RichText::new("⚙ Settings").size(13.0).color(t.text_primary()))).clicked() {
                         self.show_settings = !self.show_settings;
                     }
 
@@ -463,19 +463,22 @@ impl RustMusicApp {
 
     fn render_playback_buttons(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        let shuffle_color = if self.playlist.shuffle { t.accent() } else { t.text_dim() };
-        if ui.add(egui::Button::new(egui::RichText::new("🔀").size(16.0).color(shuffle_color)).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(32.0, 32.0))).clicked() {
+        
+        // Shuffle
+        if ui.add(egui::Button::new(egui::RichText::new("🔀").size(16.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(32.0, 32.0))).clicked() {
             self.playlist.shuffle = !self.playlist.shuffle;
         }
 
         ui.add_space(10.0);
 
+        // Previous
         if ui.add(egui::Button::new(egui::RichText::new("⏮").size(20.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(40.0, 40.0))).clicked() {
             self.play_previous();
         }
 
         ui.add_space(10.0);
 
+        // Play/Pause
         let play_icon = if self.is_playing && !self.is_paused { "⏸" } else { "▶" };
         if ui.add(egui::Button::new(egui::RichText::new(play_icon).size(24.0).color(t.bg_main())).fill(t.accent()).corner_radius(egui::CornerRadius::same(25)).min_size(egui::vec2(45.0, 45.0))).clicked() {
             self.toggle_play_pause();
@@ -483,14 +486,15 @@ impl RustMusicApp {
 
         ui.add_space(10.0);
 
+        // Next
         if ui.add(egui::Button::new(egui::RichText::new("⏭").size(20.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(40.0, 40.0))).clicked() {
             self.play_next();
         }
 
         ui.add_space(10.0);
 
-        let repeat_color = if self.playlist.repeat { t.accent() } else { t.text_dim() };
-        if ui.add(egui::Button::new(egui::RichText::new("🔁").size(16.0).color(repeat_color)).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(32.0, 32.0))).clicked() {
+        // Repeat
+        if ui.add(egui::Button::new(egui::RichText::new("🔁").size(16.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(32.0, 32.0))).clicked() {
             self.playlist.repeat = !self.playlist.repeat;
         }
     }
