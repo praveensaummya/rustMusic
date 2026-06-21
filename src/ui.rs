@@ -258,7 +258,7 @@ impl RustMusicApp {
                     ui.add_space(10.0);
 
                     // Settings button
-                    if ui.add(menu_btn("⚙️ Settings")).clicked() {
+                    if ui.add(menu_btn("⚙ Settings")).clicked() {
                         self.show_settings = !self.show_settings;
                     }
 
@@ -422,7 +422,7 @@ impl RustMusicApp {
         let mut new_volume = volume_current;
         let mut vol_changed = false;
 
-        egui::Window::new("⚙️ Settings")
+        egui::Window::new("⚙ Settings")
             .open(show)
             .resizable(true)
             .default_size([400.0, 350.0])
@@ -600,8 +600,9 @@ impl RustMusicApp {
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
                             ui.set_min_width(center_w);
-                            let slider_w = (total_width * 0.25).clamp(100.0, 400.0);
-                            let content_w = 230.0 + 8.0 + slider_w + 90.0;
+                            let fixed_w = 230.0 + 8.0 + 90.0; // buttons + spacing + text labels
+                            let slider_w = (center_w - fixed_w).clamp(50.0, 400.0);
+                            let content_w = fixed_w + slider_w;
                             let padding = (center_w - content_w) / 2.0;
                             
                             ui.add_space(padding.max(0.0));
