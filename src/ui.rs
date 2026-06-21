@@ -358,9 +358,8 @@ impl RustMusicApp {
                             ui.add_space(15.0);
 
                             ui.vertical(|ui| {
-                                let truncated_title = Self::truncate_text(&song.title, 40);
                                 ui.label(
-                                    egui::RichText::new(truncated_title)
+                                    egui::RichText::new(&song.title)
                                         .size(14.0)
                                         .color(if is_current {
                                             t.accent()
@@ -369,9 +368,8 @@ impl RustMusicApp {
                                         }),
                                 );
                                 if let Some(artist) = &song.artist {
-                                    let truncated_artist = Self::truncate_text(artist, 40);
                                     ui.label(
-                                        egui::RichText::new(truncated_artist)
+                                        egui::RichText::new(artist)
                                             .size(11.0)
                                             .color(t.text_secondary()),
                                     );
@@ -845,7 +843,10 @@ impl eframe::App for RustMusicApp {
             self.status_message = format!("Shuffle: {}", if self.playlist.shuffle { "ON" } else { "OFF" });
         }
 
-        ctx.request_repaint();
+        // Only repaint continuously when audio is playing (for progress bar updates)
+        if self.is_playing && !self.is_paused {
+            ctx.request_repaint();
+        }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
