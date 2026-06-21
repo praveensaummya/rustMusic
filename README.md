@@ -210,6 +210,57 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+## Releases
+
+This project uses GitHub Actions for automated cross-platform releases.
+
+### Creating a Release
+
+1. Update the version in `Cargo.toml`:
+   ```toml
+   [package]
+   version = "0.2.0"  # Update this
+   ```
+
+2. Commit and push changes:
+   ```bash
+   git add .
+   git commit -m "Release v0.2.0"
+   git push origin main
+   ```
+
+3. Create and push a git tag:
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+4. GitHub Actions will automatically:
+   - Build binaries for Linux, macOS, and Windows
+   - Strip debug symbols for smaller binaries
+   - Create a GitHub Release with all binaries attached
+
+### Downloading Releases
+
+Visit the [Releases page](https://github.com/praveensaummya/rustMusic/releases) to download:
+
+- `rustmusic-linux-x64` - Linux binary
+- `rustmusic-macos-x64` - macOS binary
+- `rustmusic-windows-x64` - Windows executable
+
+No installation required - just download, make executable (Linux/macOS), and run!
+
+### Manual Build
+
+If you prefer to build locally:
+
+```bash
+git clone https://github.com/praveensaummya/rustMusic.git
+cd rustMusic
+cargo build --release
+# Binary location: target/release/rustmusic
+```
+
 ## Roadmap
 
 - [ ] Playlist save/load functionality
