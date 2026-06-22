@@ -537,10 +537,10 @@ impl RustMusicApp {
     fn render_mini_player(&mut self, ctx: &egui::Context) {
         let t = self.theme;
         
-        egui::Window::new("🎵 Mini Player")
-            .resizable(false)
-            .default_size([400.0, 140.0])
-            .min_size([300.0, 120.0])
+egui::Window::new("🎵 Mini Player")
+             .resizable(false)
+             .default_size([422.0, 140.0])
+             .min_size([422.0, 140.0])
             .frame(egui::Frame {
                 fill: t.bg_surface(),
                 corner_radius: egui::CornerRadius::same(12),
@@ -579,12 +579,14 @@ impl RustMusicApp {
 
 impl eframe::App for RustMusicApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Resize window when entering/exiting mini mode
+        // Resize and decorate window when entering/exiting mini mode
         if self.mini_mode != self.prev_mini_mode {
             if self.mini_mode {
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(400.0, 140.0)));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(460.0, 200.0)));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
             } else {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1000.0, 700.0)));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
             }
             self.prev_mini_mode = self.mini_mode;
         }
