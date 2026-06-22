@@ -122,11 +122,20 @@ impl AudioEngine {
                                                 .map(|n| n.to_string_lossy().to_string());
                                         }
 
-                                        let new_sink = Sink::try_new(&stream_handle).unwrap();
-                                        new_sink.set_volume(volume);
-                                        new_sink.append(source);
-                                        sink = Some(new_sink);
-                                        let _ = status_tx.send(AudioStatus::Playing);
+                                         let new_sink = match Sink::try_new(&stream_handle) {
+                                             Ok(sink) => sink,
+                                             Err(e) => {
+                                                 let _ = status_tx.send(AudioStatus::Error(format!(
+                                                     "Failed to create audio sink: {}",
+                                                     e
+                                                 )));
+                                                 continue;
+                                             }
+                                         };
+                                         new_sink.set_volume(volume);
+                                         new_sink.append(source);
+                                         sink = Some(new_sink);
+                                         let _ = status_tx.send(AudioStatus::Playing);
                                     }
                                     Err(e) => {
                                         let _ = status_tx.send(AudioStatus::Error(format!(
@@ -216,10 +225,19 @@ impl AudioEngine {
                                                 *o = seek_pos;
                                             }
 
-                                            let new_sink = Sink::try_new(&stream_handle).unwrap();
-                                            new_sink.set_volume(volume);
-                                            new_sink.append(source);
-                                            sink = Some(new_sink);
+                                             let new_sink = match Sink::try_new(&stream_handle) {
+                                                 Ok(sink) => sink,
+                                                 Err(e) => {
+                                                     let _ = status_tx.send(AudioStatus::Error(format!(
+                                                         "Failed to create audio sink: {}",
+                                                         e
+                                                     )));
+                                                     continue;
+                                                 }
+                                             };
+                                             new_sink.set_volume(volume);
+                                             new_sink.append(source);
+                                             sink = Some(new_sink);
 
                                             // Try to seek the sink to the target position
                                             // This is safer than skip_duration on fresh decoders

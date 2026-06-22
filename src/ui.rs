@@ -27,10 +27,10 @@ impl RustMusicApp {
         let config = AppConfig::load();
         let theme = Theme::from_name(&config.theme);
         let volume = config.volume;
-        let last_folder = config
-            .last_folder
-            .as_ref()
-            .map(|s| PathBuf::from(s));
+         let last_folder = config
+             .last_folder
+             .as_ref()
+             .map(PathBuf::from);
 
         Self::apply_theme(&cc.egui_ctx, theme);
 
@@ -112,11 +112,11 @@ impl RustMusicApp {
                 .songs
                 .iter()
                 .enumerate()
-                .filter(|(_, song)| {
-                    song.title.to_lowercase().contains(&query)
-                        || song.artist.as_ref().map_or(false, |a| a.to_lowercase().contains(&query))
-                        || song.album.as_ref().map_or(false, |a| a.to_lowercase().contains(&query))
-                })
+                 .filter(|(_, song)| {
+                     song.title.to_lowercase().contains(&query)
+                         || song.artist.as_ref().is_some_and(|a| a.to_lowercase().contains(&query))
+                         || song.album.as_ref().is_some_and(|a| a.to_lowercase().contains(&query))
+                 })
                 .collect()
         }
     }
@@ -597,15 +597,11 @@ impl eframe::App for RustMusicApp {
                 AudioStatus::Paused => { self.is_paused = true; }
                 AudioStatus::Stopped => { self.is_playing = false; self.is_paused = false; }
                 AudioStatus::Finished => {
-                    self.is_playing = false;
-                    self.is_paused = false;
-                    if !self.playlist.is_empty() {
-                        if self.playlist.repeat {
-                            self.play_next();
-                        } else if self.playlist.current_index.is_some() && self.playlist.current_index.unwrap() + 1 < self.playlist.len() {
-                            self.play_next();
-                        }
-                    }
+                     self.is_playing = false;
+                     self.is_paused = false;
+                     if !self.playlist.is_empty() && (self.playlist.repeat || (self.playlist.current_index.is_some() && self.playlist.current_index.unwrap() + 1 < self.playlist.len())) {
+                         self.play_next();
+                     }
                 }
                 AudioStatus::Error(msg) => {
                     self.status_message = format!("Error: {}", msg);
