@@ -637,7 +637,7 @@ impl eframe::App for RustMusicApp {
          // Resize and decorate window when entering/exiting mini mode
          if self.mini_mode != self.prev_mini_mode {
              if self.mini_mode {
-                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(200.0, 200.0)));
+                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(460.0, 200.0)));
                  ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
              } else {
                  ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1000.0, 700.0)));
