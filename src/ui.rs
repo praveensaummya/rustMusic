@@ -20,6 +20,7 @@ pub struct RustMusicApp {
     pub show_settings: bool,
     pub mini_mode: bool,
     pub prev_mini_mode: bool,
+    pub is_maximized: bool,
 }
 
 impl RustMusicApp {
@@ -34,21 +35,22 @@ impl RustMusicApp {
 
         Self::apply_theme(&cc.egui_ctx, theme);
 
-        let mut app = RustMusicApp {
-            audio_engine: AudioEngine::new(),
-            playlist: Playlist::new("Default"),
-            volume,
-            is_playing: false,
-            is_paused: false,
-            search_query: String::new(),
-            status_message: "Welcome to RustMusic!".to_string(),
-            last_folder: last_folder.clone(),
-            theme,
-            config,
-            show_settings: false,
-            mini_mode: false,
-            prev_mini_mode: false,
-        };
+         let mut app = RustMusicApp {
+             audio_engine: AudioEngine::new(),
+             playlist: Playlist::new("Default"),
+             volume,
+             is_playing: false,
+             is_paused: false,
+             search_query: String::new(),
+             status_message: "Welcome to RustMusic!".to_string(),
+             last_folder: last_folder.clone(),
+             theme,
+             config,
+             show_settings: false,
+             mini_mode: false,
+             prev_mini_mode: false,
+             is_maximized: false,
+         };
 
         if let Some(ref folder) = last_folder {
             app.load_folder(folder.clone());
@@ -203,14 +205,21 @@ impl RustMusicApp {
                  },
              })
              .show_inside(ui, |ui| {
-                 ui.horizontal(|ui| {
-                     ui.label(
-                         egui::RichText::new("🎵 RustMusic")
-                             .size(18.0)
-                             .strong()
-                             .color(t.accent()),
-                     );
-                     ui.separator();
+                      ui.horizontal(|ui| {
+                           // Draggable title area for moving window
+                           let title_label = egui::Label::new(
+                               egui::RichText::new("🎵 RustMusic")
+                                   .size(18.0)
+                                   .strong()
+                                   .color(t.accent())
+                           );
+                           let title_response = ui.add(title_label);
+                           if title_response.drag_started() {
+                               ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                           }
+                           ui.add_space(8.0);
+                          
+                          ui.separator();
 
                      let menu_btn = |label: egui::RichText| {
                          egui::Button::new(label)
@@ -263,15 +272,39 @@ impl RustMusicApp {
                          self.show_settings = !self.show_settings;
                      }
 
-                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                         ui.add(
-                             egui::TextEdit::singleline(&mut self.search_query)
-                                 .hint_text("🔍 Search songs...")
-                                 .desired_width(200.0)
-                                 .text_color(t.text_primary())
-                                 .background_color(t.search_bg()),
-                         );
-                     });
+                      ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                          // Close button (rightmost)
+                          if ui.add(egui::Button::new(egui::RichText::new("✕").size(16.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(30.0, 30.0))).clicked()
+                          {
+                              ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                          }
+                          ui.add_space(4.0);
+                          
+                           // Maximize/Restore button
+                           let maximize_icon = if self.is_maximized { "❐" } else { "□" };
+                           if ui.add(egui::Button::new(egui::RichText::new(maximize_icon).size(16.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(30.0, 30.0))).clicked()
+                           {
+                               self.is_maximized = !self.is_maximized;
+                               ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(self.is_maximized));
+                           }
+                           ui.add_space(4.0);
+                          
+                          // Minimize button
+                          if ui.add(egui::Button::new(egui::RichText::new("−").size(16.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(30.0, 30.0))).clicked()
+                          {
+                              ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                          }
+                          ui.add_space(8.0); // space between controls and search box
+                          
+                          // Search box
+                          ui.add(
+                              egui::TextEdit::singleline(&mut self.search_query)
+                                  .hint_text("🔍 Search songs...")
+                                  .desired_width(200.0)
+                                  .text_color(t.text_primary())
+                                  .background_color(t.search_bg()),
+                          );
+                      });
                  });
              });
      }
