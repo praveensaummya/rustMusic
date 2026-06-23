@@ -274,7 +274,7 @@ impl RustMusicApp {
 
                       ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                           // Close button (rightmost)
-                          if ui.add(egui::Button::new(egui::RichText::new("✕").size(16.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(30.0, 30.0))).clicked()
+                          if ui.add(egui::Button::new(egui::RichText::new("x").size(16.0).color(t.text_primary())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(30.0, 30.0))).clicked()
                           {
                               ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                           }
@@ -615,54 +615,59 @@ impl RustMusicApp {
     }
 
      fn render_mini_player(&mut self, ctx: &egui::Context) {
-         let t = self.theme;
-         
-         egui::Window::new("🎵 Mini Player")
-             .resizable(false)
-             .default_size([420.0, 130.0])
-             .min_size([420.0, 130.0])
-             .frame(egui::Frame {
-                 fill: t.bg_surface(),
-                 corner_radius: egui::CornerRadius::same(0),
-                 inner_margin: egui::Margin::symmetric(16, 12),
-                 outer_margin: egui::Margin::default(),
-                 stroke: egui::Stroke::NONE,
-                 shadow: egui::Shadow {
-                     offset: [0i8, 0],
-                     blur: 2u8,
-                     spread: 0u8,
-                     color: t.bg_main().linear_multiply(0.2),
-                 },
-             })
-             .show(ctx, |ui| {
-                 ui.horizontal(|ui| {
-                     ui.vertical(|ui| {
-                         let song_title = self.audio_engine.get_current_song().unwrap_or_else(|| "No track".to_string());
-                         ui.label(egui::RichText::new(song_title).size(16.0).strong().color(t.text_primary()));
-                     });
+        let t = self.theme;
+        
+        egui::Window::new("")
+            .title_bar(false)
+            .resizable(false)
+            .default_size([420.0, 130.0])
+            .min_size([420.0, 130.0])
+            .frame(egui::Frame {
+                fill: egui::Color32::TRANSPARENT,
+                corner_radius: egui::CornerRadius::same(0),
+                inner_margin: egui::Margin::symmetric(16, 12),
+                outer_margin: egui::Margin::default(),
+                stroke: egui::Stroke::NONE,
+                shadow: egui::Shadow {
+                    offset: [0i8, 0],
+                    blur: 0,
+                    spread: 0u8,
+                    color: t.bg_main().linear_multiply(0.2),
+                },
+            })
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    // Drag area to move window
+                    let drag_area = ui.add(
+                        egui::Button::new(egui::RichText::new(""))
+                            .min_size(egui::vec2(ui.available_width(), 10.0))
+                            .fill(egui::Color32::TRANSPARENT),
+                    );
+                    if drag_area.drag_started() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                    }
+                    ui.add_space(8.0);
+                    if ui.add(egui::Button::new(egui::RichText::new("x").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(24.0, 24.0))).clicked() {
+                        self.mini_mode = false;
+                    }
+                });
 
-                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                         if ui.add(egui::Button::new(egui::RichText::new("✕").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(24.0, 24.0))).clicked() {
-                             self.mini_mode = false;
-                         }
-                     });
-                 });
+                ui.add_space(12.0);
+                self.render_progress(ui, ui.available_width());
+                ui.add_space(12.0);
 
-                 ui.add_space(12.0);
-                 self.render_progress(ui, ui.available_width());
-                 ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        self.render_playback_buttons(ui);
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.render_volume(ui);
+                    });
+                });
+            });
+        }
+    }
 
-                 ui.horizontal(|ui| {
-                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                         self.render_playback_buttons(ui);
-                     });
-                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                         self.render_volume(ui);
-                     });
-                 });
-             });
-     }
-}
 
 impl eframe::App for RustMusicApp {
      fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -703,12 +708,12 @@ impl eframe::App for RustMusicApp {
          } else {
              egui::CentralPanel::default()
                  .frame(egui::Frame {
-                     fill: t.bg_main(),
+                     fill: t.bg_main().linear_multiply(0.9),
                      corner_radius: egui::CornerRadius {
                          ne: 16, nw: 16,
                          se: 0, sw: 0,
                      },
-                     inner_margin: egui::Margin::same(20),
+                     inner_margin: egui::Margin::ZERO,
                      outer_margin: egui::Margin::default(),
                      stroke: egui::Stroke::NONE,
                      shadow: egui::Shadow {
