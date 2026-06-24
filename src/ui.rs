@@ -28,29 +28,29 @@ impl RustMusicApp {
         let config = AppConfig::load();
         let theme = Theme::from_name(&config.theme);
         let volume = config.volume;
-         let last_folder = config
-             .last_folder
-             .as_ref()
-             .map(PathBuf::from);
+        let last_folder = config
+            .last_folder
+            .as_ref()
+            .map(PathBuf::from);
 
         Self::apply_theme(&cc.egui_ctx, theme);
 
-         let mut app = RustMusicApp {
-             audio_engine: AudioEngine::new(),
-             playlist: Playlist::new("Default"),
-             volume,
-             is_playing: false,
-             is_paused: false,
-             search_query: String::new(),
-             status_message: "Welcome to RustMusic!".to_string(),
-             last_folder: last_folder.clone(),
-             theme,
-             config,
-             show_settings: false,
-             mini_mode: false,
-             prev_mini_mode: false,
-             is_maximized: false,
-         };
+        let mut app = RustMusicApp {
+            audio_engine: AudioEngine::new(),
+            playlist: Playlist::new("Default"),
+            volume,
+            is_playing: false,
+            is_paused: false,
+            search_query: String::new(),
+            status_message: "Welcome to RustMusic!".to_string(),
+            last_folder: last_folder.clone(),
+            theme,
+            config,
+            show_settings: false,
+            mini_mode: false,
+            prev_mini_mode: false,
+            is_maximized: false,
+        };
 
         if let Some(ref folder) = last_folder {
             app.load_folder(folder.clone());
@@ -60,7 +60,7 @@ impl RustMusicApp {
             );
         }
 
-        app
+app
     }
 
     fn apply_theme(ctx: &egui::Context, theme: Theme) {
@@ -75,10 +75,6 @@ impl RustMusicApp {
         let mut config = self.config.clone();
         config.theme = self.theme.name().to_string();
         config.volume = self.volume;
-        config.last_folder = self
-            .last_folder
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string());
         config.save();
     }
 
@@ -578,7 +574,27 @@ impl RustMusicApp {
         }
     }
 
-     fn render_progress(&mut self, ui: &mut egui::Ui, full_width: f32) {
+    fn render_playback_buttons_mini(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+
+        // Previous
+        if ui.add(egui::Button::new(egui::RichText::new("⏮").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(24.0, 24.0))).clicked() {
+            self.play_previous();
+        }
+
+        // Play/Pause (smaller)
+        let play_icon = if self.is_playing && !self.is_paused { "⏸" } else { "▶" };
+        if ui.add(egui::Button::new(egui::RichText::new(play_icon).size(18.0).color(t.bg_main())).fill(t.accent()).corner_radius(egui::CornerRadius::same(18)).min_size(egui::vec2(32.0, 32.0))).clicked() {
+            self.toggle_play_pause();
+        }
+
+        // Next
+        if ui.add(egui::Button::new(egui::RichText::new("⏭").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(24.0, 24.0))).clicked() {
+            self.play_next();
+        }
+    }
+
+    fn render_progress(&mut self, ui: &mut egui::Ui, full_width: f32) {
          let t = self.theme;
          let position = self.audio_engine.get_position();
          let duration = self.audio_engine.get_duration();
@@ -591,15 +607,15 @@ impl RustMusicApp {
          let orig_w = ui.spacing().slider_width;
          ui.spacing_mut().slider_width = slider_w;
          
-         let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
-         if ui.add(slider).drag_stopped() {
-             self.audio_engine.seek(progress as f64 * duration);
-         }
-         
-         ui.spacing_mut().slider_width = orig_w;
+let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
+        if ui.add(slider).drag_stopped() {
+            self.audio_engine.seek(progress as f64 * duration);
+        }
+        
+        ui.spacing_mut().slider_width = orig_w;
 
-         ui.label(egui::RichText::new(Self::format_time(duration)).size(12.0).color(t.text_dim()));
-     }
+        ui.label(egui::RichText::new(Self::format_time(duration)).size(12.0).color(t.text_dim()));
+    }
 
     fn render_volume(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
@@ -614,76 +630,101 @@ impl RustMusicApp {
         }
     }
 
-     fn render_mini_player(&mut self, ctx: &egui::Context) {
+    fn render_progress_mini(&mut self, ui: &mut egui::Ui, full_width: f32) {
+        let position = self.audio_engine.get_position();
+        let duration = self.audio_engine.get_duration();
+
+        let mut progress = if duration > 0.0 { (position / duration) as f32 } else { 0.0 };
+        let slider_w = (full_width - 60.0).max(50.0);
+        let orig_w = ui.spacing().slider_width;
+        ui.spacing_mut().slider_width = slider_w;
+        
+        let slider = egui::Slider::new(&mut progress, 0.0..=1.0).show_value(false);
+        if ui.add(slider).drag_stopped() {
+            self.audio_engine.seek(progress as f64 * duration);
+        }
+        
+        ui.spacing_mut().slider_width = orig_w;
+    }
+
+    fn render_volume_mini(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let volume_icon = if self.volume == 0.0 { "🔇" } else if self.volume < 0.3 { "🔈" } else if self.volume < 0.7 { "🔉" } else { "🔊" };
+        ui.label(egui::RichText::new(volume_icon).size(14.0).color(t.text_primary()));
+        
+        let mut vol = self.volume;
+        ui.add_sized(egui::vec2(80.0, 16.0), egui::Slider::new(&mut vol, 0.0..=1.0).show_value(false));
+        if vol != self.volume {
+            self.volume = vol;
+            self.audio_engine.set_volume(self.volume);
+        }
+    }
+
+fn render_mini_player(&mut self, ctx: &egui::Context) {
         let t = self.theme;
         
         egui::Window::new("")
             .title_bar(false)
             .resizable(false)
-            .default_size([420.0, 130.0])
-            .min_size([420.0, 130.0])
+            .default_size([380.0, 110.0])
+            .min_size([320.0, 90.0])
             .frame(egui::Frame {
-                fill: egui::Color32::TRANSPARENT,
-                corner_radius: egui::CornerRadius::same(0),
-                inner_margin: egui::Margin::symmetric(16, 12),
+                fill: t.bg_main().linear_multiply(0.7),
+                corner_radius: egui::CornerRadius::same(12),
+                inner_margin: egui::Margin::same(12),
                 outer_margin: egui::Margin::default(),
                 stroke: egui::Stroke::NONE,
                 shadow: egui::Shadow {
                     offset: [0i8, 0],
-                    blur: 0,
+                    blur: 8u8,
                     spread: 0u8,
-                    color: t.bg_main().linear_multiply(0.2),
+                    color: egui::Color32::from_black_alpha(100),
                 },
             })
             .show(ctx, |ui| {
+                // Title bar with drag area and close button
                 ui.horizontal(|ui| {
-                    // Drag area to move window
-                    let drag_area = ui.add(
-                        egui::Button::new(egui::RichText::new(""))
-                            .min_size(egui::vec2(ui.available_width(), 10.0))
-                            .fill(egui::Color32::TRANSPARENT),
-                    );
-                    if drag_area.drag_started() {
+                    // Make the whole top area draggable via a transparent button background
+                    let song_title = self.audio_engine.get_current_song().map(|t| Self::truncate_text(&t, 30)).unwrap_or_else(|| "No track selected".to_string());
+                    let title_drag = egui::Button::new(egui::RichText::new(&song_title).size(12.0).color(t.text_dim()))
+                        .fill(egui::Color32::TRANSPARENT)
+                        .min_size(egui::vec2(ui.available_width() - 28.0, 10.0));
+                    if ui.add(title_drag).drag_started() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                     }
-                    ui.add_space(8.0);
-                    if ui.add(egui::Button::new(egui::RichText::new("x").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(24.0, 24.0))).clicked() {
+                    if ui.add(egui::Button::new(egui::RichText::new("x").size(14.0).color(t.text_dim())).fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(20.0, 20.0))).clicked() {
                         self.mini_mode = false;
                     }
                 });
 
-                ui.add_space(12.0);
-                self.render_progress(ui, ui.available_width());
-                ui.add_space(12.0);
+                ui.add_space(8.0);
+                self.render_progress_mini(ui, ui.available_width());
+                ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        self.render_playback_buttons(ui);
+                        self.render_playback_buttons_mini(ui);
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        self.render_volume(ui);
+                        self.render_volume_mini(ui);
                     });
                 });
             });
-        }
     }
-
+}
 
 impl eframe::App for RustMusicApp {
-     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-         let t = self.theme;
-         // Resize and decorate window when entering/exiting mini mode
-         if self.mini_mode != self.prev_mini_mode {
-             if self.mini_mode {
-                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(460.0, 200.0)));
-                 ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
-             } else {
-                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1000.0, 700.0)));
-                 ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
-             }
-             self.prev_mini_mode = self.mini_mode;
-         }
-
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let t = self.theme;
+        // Resize window when entering/exiting mini mode
+        if self.mini_mode != self.prev_mini_mode {
+            if self.mini_mode {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(400.0, 130.0)));
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1000.0, 700.0)));
+            }
+            self.prev_mini_mode = self.mini_mode;
+        }
 
         while let Some(status) = self.audio_engine.check_status() {
             match status {
@@ -691,11 +732,11 @@ impl eframe::App for RustMusicApp {
                 AudioStatus::Paused => { self.is_paused = true; }
                 AudioStatus::Stopped => { self.is_playing = false; self.is_paused = false; }
                 AudioStatus::Finished => {
-                     self.is_playing = false;
-                     self.is_paused = false;
-                     if !self.playlist.is_empty() && (self.playlist.repeat || (self.playlist.current_index.is_some() && self.playlist.current_index.unwrap() + 1 < self.playlist.len())) {
-                         self.play_next();
-                     }
+                    self.is_playing = false;
+                    self.is_paused = false;
+                    if !self.playlist.is_empty() && (self.playlist.repeat || (self.playlist.current_index.is_some() && self.playlist.current_index.unwrap() + 1 < self.playlist.len())) {
+                        self.play_next();
+                    }
                 }
                 AudioStatus::Error(msg) => {
                     self.status_message = format!("Error: {}", msg);
@@ -703,35 +744,35 @@ impl eframe::App for RustMusicApp {
             }
         }
 
-         if self.mini_mode {
-             self.render_mini_player(ctx);
-         } else {
-             egui::CentralPanel::default()
-                 .frame(egui::Frame {
-                     fill: t.bg_main().linear_multiply(0.9),
-                     corner_radius: egui::CornerRadius {
-                         ne: 16, nw: 16,
-                         se: 0, sw: 0,
-                     },
-                     inner_margin: egui::Margin::ZERO,
-                     outer_margin: egui::Margin::default(),
-                     stroke: egui::Stroke::NONE,
-                     shadow: egui::Shadow {
-                         offset: [0i8, 0],
-                         blur: 2u8,
-                         spread: 0u8,
-                         color: t.bg_main().linear_multiply(0.2),
-                     },
-                 })
-                 .show(ctx, |ui| {
-                     self.render_menu_bar(ui);
-                     let clicked_index = egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| self.render_playlist(ui)).inner;
-                     if let Some(idx) = clicked_index {
-                         self.play_song(idx);
-                     }
-                 });
-             self.render_player_bar(ctx);
-         }
+        if self.mini_mode {
+            self.render_mini_player(ctx);
+        } else {
+            egui::CentralPanel::default()
+                .frame(egui::Frame {
+                    fill: t.bg_main().linear_multiply(0.9),
+                    corner_radius: egui::CornerRadius {
+                        ne: 16, nw: 16,
+                        se: 0, sw: 0,
+                    },
+                    inner_margin: egui::Margin::ZERO,
+                    outer_margin: egui::Margin::default(),
+                    stroke: egui::Stroke::NONE,
+                    shadow: egui::Shadow {
+                        offset: [0i8, 0],
+                        blur: 2u8,
+                        spread: 0u8,
+                        color: t.bg_main().linear_multiply(0.2),
+                    },
+                })
+                .show(ctx, |ui| {
+                    self.render_menu_bar(ui);
+                    let clicked_index = egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| self.render_playlist(ui)).inner;
+                    if let Some(idx) = clicked_index {
+                        self.play_song(idx);
+                    }
+                });
+            self.render_player_bar(ctx);
+        }
 
         if self.show_settings {
             self.render_settings_window(ctx);
